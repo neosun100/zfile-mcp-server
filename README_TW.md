@@ -1,111 +1,195 @@
-[English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_TW.md) | [日本語](README_JP.md)
-
 # ZFile MCP Server
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
-[![MCP](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
+一個 Model Context Protocol (MCP) 伺服器，讓 AI 助手能夠與 [ZFile](https://github.com/zfile-dev/zfile) 線上檔案管理系統互動。
 
-> 一個基於 Model Context Protocol (MCP) 的伺服器，讓 AI 助手能夠與 ZFile 互動 - 無縫上傳檔案並生成分享連結。
+[![Docker Hub](https://img.shields.io/docker/v/neosun/zfile-mcp-server?label=Docker%20Hub)](https://hub.docker.com/r/neosun/zfile-mcp-server)
+[![Docker Pulls](https://img.shields.io/docker/pulls/neosun/zfile-mcp-server)](https://hub.docker.com/r/neosun/zfile-mcp-server)
 
-## ✨ 功能特性
-
-- 🔗 **基於 SSE 的 MCP 伺服器** - 無需本地依賴
-- 📁 **檔案列表** - 瀏覽 ZFile 儲存中的檔案
-- 🔗 **直連生成** - 建立永久直連
-- ⏱️ **短連生成** - 建立有時效的短連結
-- 🐳 **Docker 就緒** - 使用 Docker Compose 輕鬆部署
-- 🔒 **安全設計** - 憑據儲存在客戶端，通過 Header 傳遞
-
-## 🔐 安全架構
+## 架構
 
 ```
-┌─────────────────────────┐         ┌─────────────────┐         ┌─────────┐
-│  MCP 客戶端 (Kiro)       │  SSE    │  MCP 伺服器      │  API    │  ZFile  │
-│  ┌───────────────────┐  │ ──────► │  (無狀態)        │ ──────► │         │
-│  │ 憑據儲存在這裡     │  │ Headers │  不儲存任何憑據   │         │         │
-│  └───────────────────┘  │         │                 │         │         │
-└─────────────────────────┘         └─────────────────┘         └─────────┘
+┌─────────────────────────┐         ┌─────────────────────────┐         ┌─────────┐
+│  MCP 客戶端 (Kiro)       │  SSE    │  MCP 伺服器 (Docker)     │  API    │  ZFile  │
+│  ┌───────────────────┐  │ ──────► │  ┌─────────────────┐    │ ──────► │         │
+│  │ 僅存儲 ACCESS_TOKEN│  │  Token  │  │ ZFile 帳號密碼   │    │         │         │
+│  └───────────────────┘  │         │  │ 存儲在這裡       │    │         │         │
+└─────────────────────────┘         │  └─────────────────┘    │         └─────────┘
+                                    └─────────────────────────┘
 ```
 
-**憑據儲存在你的 MCP 客戶端配置中，而不是伺服器上。** 伺服器是無狀態的，只負責轉發已認證的請求。
+- **客戶端**: 僅存儲 ACCESS_TOKEN（用於 MCP 認證）
+- **伺服器端**: 通過環境變數存儲 ZFile 帳號密碼
+- **安全性**: ZFile 憑據永遠不會暴露給客戶端
 
-## 🚀 快速開始
+## 功能特性
 
-### 1. 部署伺服器
+- 📁 **檔案列表** - 瀏覽 ZFile 目錄
+- ⬆️ **檔案上傳** - 上傳檔案並自動生成直連
+- 🔗 **永久直連** - 生成永久下載直連
+- 🔗 **臨時短連** - 生成 31 天有效期短連
+- 📤 **大檔案支援** - 獲取上傳 URL 直接上傳大檔案
+
+## 快速開始
+
+### 方式一：Docker Hub（推薦）
 
 ```bash
-# 克隆倉庫
-git clone https://github.com/neosun100/zfile-mcp-server.git
-cd zfile-mcp-server
+docker run -d \
+  --name zfile-mcp \
+  -p 8092:8092 \
+  -e ZFILE_URL=https://你的ZFile地址 \
+  -e ZFILE_USER=使用者名稱 \
+  -e ZFILE_PASS=密碼 \
+  -e ZFILE_STORAGE_KEY=1 \
+  -v ./data:/data \
+  neosun/zfile-mcp-server:latest
+```
 
-# 啟動服務
+### 方式二：Docker Compose
+
+建立 `docker-compose.yml`：
+
+```yaml
+services:
+  zfile-mcp:
+    image: neosun/zfile-mcp-server:latest
+    container_name: zfile-mcp
+    restart: always
+    ports:
+      - '8092:8092'
+    environment:
+      - ZFILE_URL=https://你的ZFile地址
+      - ZFILE_USER=使用者名稱
+      - ZFILE_PASS=密碼
+      - ZFILE_STORAGE_KEY=1
+    volumes:
+      - ./data:/data
+```
+
+啟動：
+
+```bash
 docker compose up -d
 ```
 
-### 2. 配置 MCP 客戶端
+### 方式三：從原始碼建構
 
-在你的 MCP 客戶端配置中添加（如 `~/.kiro/settings/mcp.json`）：
+```bash
+git clone https://github.com/neosun100/zfile-mcp-server.git
+cd zfile-mcp-server
+docker build -t zfile-mcp-server .
+```
+
+## 環境變數
+
+| 變數 | 必填 | 說明 | 範例 |
+|------|------|------|------|
+| `ZFILE_URL` | ✅ | ZFile 伺服器地址 | `https://zfile.example.com` |
+| `ZFILE_USER` | ✅ | ZFile 使用者名稱 | `admin` |
+| `ZFILE_PASS` | ✅ | ZFile 密碼 | `your_password` |
+| `ZFILE_STORAGE_KEY` | ❌ | 儲存源 Key（預設: 1） | `1` |
+| `ACCESS_TOKEN` | ❌ | 自訂存取令牌（不設定則自動生成） | `zfile-xxx` |
+
+## 獲取存取令牌
+
+服務首次啟動時會自動生成安全令牌：
+
+```bash
+docker logs zfile-mcp
+```
+
+查找：
+```
+==================================================
+ACCESS_TOKEN: zfile-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+==================================================
+```
+
+## 配置 MCP 客戶端
+
+在 MCP 客戶端配置檔案中添加（如 `~/.kiro/settings/mcp.json`）：
 
 ```json
 {
   "mcpServers": {
     "zfile": {
       "type": "sse",
-      "url": "https://your-mcp-server.com/sse",
-      "headers": {
-        "X-ZFile-URL": "https://your-zfile-server.com",
-        "X-ZFile-User": "your_username",
-        "X-ZFile-Pass": "your_password",
-        "X-ZFile-Storage-Key": "1"
-      },
-      "autoApprove": ["*"]
+      "url": "https://你的伺服器/mcp/sse?token=你的ACCESS_TOKEN",
+      "headers": {},
+      "autoApprove": ["*"],
+      "disabled": false
     }
   }
 }
 ```
 
-## 📦 安裝部署
+## 可用工具
 
-### 前置條件
+| 工具 | 描述 | 適用場景 |
+|------|------|----------|
+| `zfile_list` | 列出目錄檔案 | 瀏覽檔案 |
+| `zfile_upload` | 上傳檔案(base64)並返回直連 | 小檔案 (<5MB) |
+| `zfile_get_upload_url` | 獲取直傳 URL | 大檔案上傳 |
+| `zfile_direct_link` | 生成永久直連 | 永久分享 |
+| `zfile_short_link` | 生成 31 天短連 | 臨時分享 |
 
-- Docker & Docker Compose (v2.0+)
-- 一個運行中的 [ZFile](https://github.com/zfile-dev/zfile) 實例
-- （可選）Nginx 用於 HTTPS 反向代理
+### 工具詳情
 
-### Docker 部署
+#### zfile_list
+列出 ZFile 目錄中的檔案。
 
-```bash
-git clone https://github.com/neosun100/zfile-mcp-server.git
-cd zfile-mcp-server
-docker compose up -d
+**參數：**
+- `path` (字串, 可選): 目錄路徑，預設 "/"
 
-# 驗證
-curl http://localhost:8092/health
-# {"status":"ok"}
+#### zfile_upload
+上傳小檔案，自動生成直連返回。
+
+**參數：**
+- `file_path` (字串, 必填): ZFile 中的目標路徑，如 "/uploads/test.txt"
+- `file_content_base64` (字串, 必填): base64 編碼的檔案內容
+
+**返回：**
+```
+✅ Upload success: /test.txt
+📎 Direct link: https://你的ZFile地址/directlink/1/test.txt
 ```
 
-### 直接運行（開發環境）
+#### zfile_get_upload_url
+獲取大檔案直傳 URL，客戶端可直接 PUT 上傳。
 
-```bash
-pip install fastapi uvicorn httpx
-python server.py
+**參數：**
+- `path` (字串, 可選): 目標目錄，預設 "/"
+- `filename` (字串, 必填): 檔案名稱
+- `size` (整數, 必填): 檔案大小（位元組）
+
+**返回：**
+```
+Upload URL: https://你的ZFile地址/file/upload/1/largefile.zip
+
+Upload command:
+curl -X PUT 'URL' -F 'file=@/path/to/yourfile'
 ```
 
-## ⚙️ 配置說明
+#### zfile_direct_link
+生成永久下載直連。
 
-### MCP 客戶端 Headers
+**參數：**
+- `file_path` (字串, 必填): 檔案路徑，如 "/test.pdf"
 
-| Header | 必填 | 說明 |
-|--------|------|------|
-| `X-ZFile-URL` | ✅ | ZFile 伺服器地址 |
-| `X-ZFile-User` | ✅ | ZFile 登入用戶名 |
-| `X-ZFile-Pass` | ✅ | ZFile 登入密碼 |
-| `X-ZFile-Storage-Key` | ❌ | 儲存源 Key（預設：`1`） |
+#### zfile_short_link
+生成 31 天有效期短連。
 
-### Nginx 反向代理（推薦用於 HTTPS）
+**參數：**
+- `file_path` (字串, 必填): 檔案路徑，如 "/test.pdf"
 
-⚠️ **重要提示**：必須轉發 `X-ZFile-*` headers 到後端伺服器。如果缺少這些 headers，認證將失敗並返回 401 Unauthorized。
+## 安全性
+
+- **存取令牌**: 首次啟動自動生成，儲存在 `./data/.access_token`
+- **令牌持久化**: 容器重啟後令牌不變（儲存在 volume 中）
+- **憑據安全**: ZFile 帳號密碼僅儲存在伺服器端，不暴露給客戶端
+- **映像無敏感資訊**: Docker 映像不包含任何敏感資料
+
+## Nginx 反向代理（可選）
 
 ```nginx
 location /mcp/ {
@@ -115,96 +199,14 @@ location /mcp/ {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-    
-    # 關鍵：轉發認證 headers
-    proxy_set_header X-ZFile-URL $http_x_zfile_url;
-    proxy_set_header X-ZFile-User $http_x_zfile_user;
-    proxy_set_header X-ZFile-Pass $http_x_zfile_pass;
-    proxy_set_header X-ZFile-Storage-Key $http_x_zfile_storage_key;
-    
-    # SSE 特定設置
-    proxy_set_header Connection "";
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header Connection '';
     proxy_buffering off;
     proxy_cache off;
     chunked_transfer_encoding off;
 }
 ```
 
-**Header 轉發說明：**
-| Nginx 變數 | 來源 Header | 說明 |
-|------------|-------------|------|
-| `$http_x_zfile_url` | `X-ZFile-URL` | ZFile 伺服器地址 |
-| `$http_x_zfile_user` | `X-ZFile-User` | 登入用戶名 |
-| `$http_x_zfile_pass` | `X-ZFile-Pass` | 登入密碼 |
-| `$http_x_zfile_storage_key` | `X-ZFile-Storage-Key` | 儲存源 Key |
+## 授權條款
 
-## 📖 使用示例
-
-### 可用工具
-
-| 工具 | 說明 |
-|------|------|
-| `zfile_list` | 列出目錄中的檔案 |
-| `zfile_direct_link` | 生成永久直連 |
-| `zfile_short_link` | 生成短連（31天有效） |
-
-### 示例
-
-在 AI 助手中：
-
-```
-"列出 ZFile 根目錄的檔案"
-→ 調用 zfile_list(path="/")
-
-"給 /document.pdf 生成直連"
-→ 調用 zfile_direct_link(file_path="/document.pdf")
-→ 返回: https://your-zfile.com/directlink/1/document.pdf
-
-"給 /image.png 建立短連"
-→ 調用 zfile_short_link(file_path="/image.png")
-→ 返回: https://your-zfile.com/s/AbCdEf
-```
-
-## 🏗️ 專案結構
-
-```
-zfile-mcp-server/
-├── server.py           # MCP SSE 伺服器（無狀態）
-├── Dockerfile          # Docker 構建檔案
-├── docker-compose.yml  # Docker Compose 配置
-├── .gitignore
-├── LICENSE
-├── CHANGELOG.md
-└── README.md
-```
-
-## 🛠️ 技術棧
-
-- **Python 3.11+**
-- **FastAPI** - Web 框架
-- **Uvicorn** - ASGI 伺服器
-- **httpx** - HTTP 客戶端
-- **Docker** - 容器化
-
-## 🤝 貢獻指南
-
-歡迎貢獻！請隨時提交 Pull Request。
-
-## 📄 許可證
-
-本專案採用 MIT 許可證 - 詳見 [LICENSE](LICENSE) 檔案。
-
-## 🙏 致謝
-
-- [ZFile](https://github.com/zfile-dev/zfile) - 優秀的檔案管理系統
-- [Model Context Protocol](https://modelcontextprotocol.io/) - MCP 協議規範
-
----
-
-## ⭐ Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=neosun100/zfile-mcp-server&type=Date)](https://star-history.com/#neosun100/zfile-mcp-server)
-
-## 📱 關注公眾號
-
-![公眾號](https://img.aws.xin/uPic/扫码_搜索联合传播样式-标准色版.png)
+MIT License

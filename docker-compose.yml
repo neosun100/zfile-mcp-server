@@ -1,7 +1,14 @@
 services:
   zfile-mcp:
-    build: .
+    image: neosun/zfile-mcp-server:latest
     container_name: zfile-mcp
     restart: always
     ports:
       - '8092:8092'
+    environment:
+      - ZFILE_URL=https://your-zfile-server.com
+      - ZFILE_USER=your_username
+      - ZFILE_PASS=your_password
+      - ZFILE_STORAGE_KEY=1
+    volumes:
+      - ./data:/data

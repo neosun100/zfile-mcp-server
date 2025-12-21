@@ -1,49 +1,111 @@
-[English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_TW.md) | [日本語](README_JP.md)
-
 # ZFile MCP Server
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
-[![MCP](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io/)
+A Model Context Protocol (MCP) server that enables AI assistants to interact with [ZFile](https://github.com/zfile-dev/zfile) - a powerful online file management system.
 
-> A Model Context Protocol (MCP) server that enables AI assistants to interact with ZFile - upload files and generate shareable links seamlessly.
+[![Docker Hub](https://img.shields.io/docker/v/neosun/zfile-mcp-server?label=Docker%20Hub)](https://hub.docker.com/r/neosun/zfile-mcp-server)
+[![Docker Pulls](https://img.shields.io/docker/pulls/neosun/zfile-mcp-server)](https://hub.docker.com/r/neosun/zfile-mcp-server)
 
-## ✨ Features
-
-- 🔗 **SSE-based MCP Server** - No local dependencies required
-- 📁 **File Listing** - Browse files in your ZFile storage
-- 🔗 **Direct Link Generation** - Create permanent direct links
-- ⏱️ **Short Link Generation** - Create time-limited short links
-- 🐳 **Docker Ready** - Easy deployment with Docker Compose
-- 🔒 **Secure** - Credentials stored on client side, passed via headers
-
-## 🔐 Security Design
+## Architecture
 
 ```
-┌─────────────────────────┐         ┌─────────────────┐         ┌─────────┐
-│  MCP Client (Kiro)      │  SSE    │  MCP Server     │  API    │  ZFile  │
-│  ┌───────────────────┐  │ ──────► │  (Stateless)    │ ──────► │         │
-│  │ Credentials here  │  │ Headers │  No credentials │         │         │
-│  └───────────────────┘  │         │  stored here    │         │         │
-└─────────────────────────┘         └─────────────────┘         └─────────┘
+┌─────────────────────────┐         ┌─────────────────────────┐         ┌─────────┐
+│  MCP Client (Kiro)      │  SSE    │  MCP Server (Docker)    │  API    │  ZFile  │
+│  ┌───────────────────┐  │ ──────► │  ┌─────────────────┐    │ ──────► │         │
+│  │ Only ACCESS_TOKEN │  │  Token  │  │ ZFile credentials│   │         │         │
+│  └───────────────────┘  │         │  │ stored here      │   │         │         │
+└─────────────────────────┘         │  └─────────────────┘    │         └─────────┘
+                                    └─────────────────────────┘
 ```
 
-**Credentials are stored in your MCP client configuration, NOT on the server.** The server is stateless and only forwards authenticated requests.
+- **Client**: Only stores ACCESS_TOKEN (for MCP authentication)
+- **Server**: Stores ZFile credentials (username/password) via environment variables
+- **Security**: ZFile credentials never exposed to clients
 
-## 🚀 Quick Start
+## Features
 
-### 1. Deploy the Server
+- 📁 **List Files** - Browse directories in ZFile
+- ⬆️ **Upload Files** - Upload files with automatic direct link generation
+- 🔗 **Direct Links** - Generate permanent direct download links
+- 🔗 **Short Links** - Generate temporary short links (31 days)
+- 📤 **Large File Support** - Get upload URLs for direct large file uploads
+
+## Quick Start
+
+### Option 1: Docker Hub (Recommended)
 
 ```bash
-# Clone the repository
-git clone https://github.com/neosun100/zfile-mcp-server.git
-cd zfile-mcp-server
+docker run -d \
+  --name zfile-mcp \
+  -p 8092:8092 \
+  -e ZFILE_URL=https://your-zfile-server.com \
+  -e ZFILE_USER=your_username \
+  -e ZFILE_PASS=your_password \
+  -e ZFILE_STORAGE_KEY=1 \
+  -v ./data:/data \
+  neosun/zfile-mcp-server:latest
+```
 
-# Start the server
+### Option 2: Docker Compose
+
+Create `docker-compose.yml`:
+
+```yaml
+services:
+  zfile-mcp:
+    image: neosun/zfile-mcp-server:latest
+    container_name: zfile-mcp
+    restart: always
+    ports:
+      - '8092:8092'
+    environment:
+      - ZFILE_URL=https://your-zfile-server.com
+      - ZFILE_USER=your_username
+      - ZFILE_PASS=your_password
+      - ZFILE_STORAGE_KEY=1
+    volumes:
+      - ./data:/data
+```
+
+Start:
+
+```bash
 docker compose up -d
 ```
 
-### 2. Configure MCP Client
+### Option 3: Build from Source
+
+```bash
+git clone https://github.com/neosun100/zfile-mcp-server.git
+cd zfile-mcp-server
+docker build -t zfile-mcp-server .
+```
+
+## Environment Variables
+
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `ZFILE_URL` | ✅ | ZFile server URL | `https://zfile.example.com` |
+| `ZFILE_USER` | ✅ | ZFile username | `admin` |
+| `ZFILE_PASS` | ✅ | ZFile password | `your_password` |
+| `ZFILE_STORAGE_KEY` | ❌ | Storage source key (default: 1) | `1` |
+| `ACCESS_TOKEN` | ❌ | Custom access token (auto-generated if not set) | `zfile-xxx` |
+
+## Get Access Token
+
+The server automatically generates a secure access token on first startup:
+
+```bash
+docker logs zfile-mcp
+```
+
+Look for:
+```
+==================================================
+ACCESS_TOKEN: zfile-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+==================================================
+```
+
+## Configure MCP Client
 
 Add to your MCP client configuration (e.g., `~/.kiro/settings/mcp.json`):
 
@@ -52,60 +114,82 @@ Add to your MCP client configuration (e.g., `~/.kiro/settings/mcp.json`):
   "mcpServers": {
     "zfile": {
       "type": "sse",
-      "url": "https://your-mcp-server.com/sse",
-      "headers": {
-        "X-ZFile-URL": "https://your-zfile-server.com",
-        "X-ZFile-User": "your_username",
-        "X-ZFile-Pass": "your_password",
-        "X-ZFile-Storage-Key": "1"
-      },
-      "autoApprove": ["*"]
+      "url": "https://your-server.com/mcp/sse?token=YOUR_ACCESS_TOKEN",
+      "headers": {},
+      "autoApprove": ["*"],
+      "disabled": false
     }
   }
 }
 ```
 
-## 📦 Installation
+## Available Tools
 
-### Prerequisites
+| Tool | Description | Use Case |
+|------|-------------|----------|
+| `zfile_list` | List files in a directory | Browse files |
+| `zfile_upload` | Upload file (base64) with auto direct link | Small files (<5MB) |
+| `zfile_get_upload_url` | Get direct upload URL | Large files |
+| `zfile_direct_link` | Generate permanent direct link | Share files permanently |
+| `zfile_short_link` | Generate 31-day short link | Temporary sharing |
 
-- Docker & Docker Compose (v2.0+)
-- A running [ZFile](https://github.com/zfile-dev/zfile) instance
-- (Optional) Nginx for reverse proxy with HTTPS
+### Tool Details
 
-### Docker Deployment
+#### zfile_list
+List files in a ZFile directory.
 
-```bash
-git clone https://github.com/neosun100/zfile-mcp-server.git
-cd zfile-mcp-server
-docker compose up -d
+**Parameters:**
+- `path` (string, optional): Directory path, default "/"
 
-# Verify
-curl http://localhost:8092/health
-# {"status":"ok"}
+#### zfile_upload
+Upload a small file with automatic direct link generation.
+
+**Parameters:**
+- `file_path` (string, required): Target path in ZFile, e.g., "/uploads/test.txt"
+- `file_content_base64` (string, required): File content encoded in base64
+
+**Returns:**
+```
+✅ Upload success: /test.txt
+📎 Direct link: https://your-zfile-server.com/directlink/1/test.txt
 ```
 
-### Direct Run (Development)
+#### zfile_get_upload_url
+Get a direct upload URL for large files.
 
-```bash
-pip install fastapi uvicorn httpx
-python server.py
+**Parameters:**
+- `path` (string, optional): Target directory, default "/"
+- `filename` (string, required): File name
+- `size` (integer, required): File size in bytes
+
+**Returns:**
+```
+Upload URL: https://your-zfile-server.com/file/upload/1/largefile.zip
+
+Upload command:
+curl -X PUT 'URL' -F 'file=@/path/to/yourfile'
 ```
 
-## ⚙️ Configuration
+#### zfile_direct_link
+Generate a permanent direct download link.
 
-### MCP Client Headers
+**Parameters:**
+- `file_path` (string, required): File path, e.g., "/test.pdf"
 
-| Header | Required | Description |
-|--------|----------|-------------|
-| `X-ZFile-URL` | ✅ | Your ZFile server URL |
-| `X-ZFile-User` | ✅ | ZFile login username |
-| `X-ZFile-Pass` | ✅ | ZFile login password |
-| `X-ZFile-Storage-Key` | ❌ | Storage source key (default: `1`) |
+#### zfile_short_link
+Generate a short link valid for 31 days.
 
-### Nginx Reverse Proxy (Recommended for HTTPS)
+**Parameters:**
+- `file_path` (string, required): File path, e.g., "/test.pdf"
 
-⚠️ **Important**: You MUST forward the `X-ZFile-*` headers from client to server. Without these headers, authentication will fail with 401 Unauthorized.
+## Security
+
+- **Access Token**: Auto-generated on first startup, stored in `./data/.access_token`
+- **Token Persistence**: Token survives container restarts (stored in volume)
+- **Credentials**: ZFile credentials stored server-side only, never exposed to clients
+- **No Secrets in Image**: Docker image contains no sensitive data
+
+## Nginx Reverse Proxy (Optional)
 
 ```nginx
 location /mcp/ {
@@ -115,96 +199,14 @@ location /mcp/ {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-    
-    # CRITICAL: Forward authentication headers
-    proxy_set_header X-ZFile-URL $http_x_zfile_url;
-    proxy_set_header X-ZFile-User $http_x_zfile_user;
-    proxy_set_header X-ZFile-Pass $http_x_zfile_pass;
-    proxy_set_header X-ZFile-Storage-Key $http_x_zfile_storage_key;
-    
-    # SSE specific settings
-    proxy_set_header Connection "";
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header Connection '';
     proxy_buffering off;
     proxy_cache off;
     chunked_transfer_encoding off;
 }
 ```
 
-**Header Forwarding Explanation:**
-| Nginx Variable | Source Header | Description |
-|----------------|---------------|-------------|
-| `$http_x_zfile_url` | `X-ZFile-URL` | ZFile server URL |
-| `$http_x_zfile_user` | `X-ZFile-User` | Login username |
-| `$http_x_zfile_pass` | `X-ZFile-Pass` | Login password |
-| `$http_x_zfile_storage_key` | `X-ZFile-Storage-Key` | Storage source key |
+## License
 
-## 📖 Usage
-
-### Available Tools
-
-| Tool | Description |
-|------|-------------|
-| `zfile_list` | List files in a directory |
-| `zfile_direct_link` | Generate a permanent direct link |
-| `zfile_short_link` | Generate a short link (31 days) |
-
-### Examples
-
-In your AI assistant:
-
-```
-"List files in ZFile root directory"
-→ Calls zfile_list(path="/")
-
-"Generate a direct link for /document.pdf"
-→ Calls zfile_direct_link(file_path="/document.pdf")
-→ Returns: https://your-zfile.com/directlink/1/document.pdf
-
-"Create a short link for /image.png"
-→ Calls zfile_short_link(file_path="/image.png")
-→ Returns: https://your-zfile.com/s/AbCdEf
-```
-
-## 🏗️ Project Structure
-
-```
-zfile-mcp-server/
-├── server.py           # Main MCP SSE server (stateless)
-├── Dockerfile          # Docker build file
-├── docker-compose.yml  # Docker Compose config
-├── .gitignore
-├── LICENSE
-├── CHANGELOG.md
-└── README.md
-```
-
-## 🛠️ Tech Stack
-
-- **Python 3.11+**
-- **FastAPI** - Web framework
-- **Uvicorn** - ASGI server
-- **httpx** - HTTP client
-- **Docker** - Containerization
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [ZFile](https://github.com/zfile-dev/zfile) - The excellent file management system
-- [Model Context Protocol](https://modelcontextprotocol.io/) - The MCP specification
-
----
-
-## ⭐ Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=neosun100/zfile-mcp-server&type=Date)](https://star-history.com/#neosun100/zfile-mcp-server)
-
-## 📱 Follow Me
-
-![WeChat](https://img.aws.xin/uPic/扫码_搜索联合传播样式-标准色版.png)
+MIT License
