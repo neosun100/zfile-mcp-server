@@ -105,22 +105,38 @@ python server.py
 
 ### Nginx Reverse Proxy (Recommended for HTTPS)
 
+⚠️ **Important**: You MUST forward the `X-ZFile-*` headers from client to server. Without these headers, authentication will fail with 401 Unauthorized.
+
 ```nginx
 location /mcp/ {
     proxy_pass http://127.0.0.1:8092/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    
+    # CRITICAL: Forward authentication headers
     proxy_set_header X-ZFile-URL $http_x_zfile_url;
     proxy_set_header X-ZFile-User $http_x_zfile_user;
     proxy_set_header X-ZFile-Pass $http_x_zfile_pass;
     proxy_set_header X-ZFile-Storage-Key $http_x_zfile_storage_key;
+    
+    # SSE specific settings
     proxy_set_header Connection "";
     proxy_buffering off;
     proxy_cache off;
     chunked_transfer_encoding off;
 }
 ```
+
+**Header Forwarding Explanation:**
+| Nginx Variable | Source Header | Description |
+|----------------|---------------|-------------|
+| `$http_x_zfile_url` | `X-ZFile-URL` | ZFile server URL |
+| `$http_x_zfile_user` | `X-ZFile-User` | Login username |
+| `$http_x_zfile_pass` | `X-ZFile-Pass` | Login password |
+| `$http_x_zfile_storage_key` | `X-ZFile-Storage-Key` | Storage source key |
 
 ## 📖 Usage
 

@@ -105,22 +105,38 @@ python server.py
 
 ### Nginx 反向代理（推荐用于 HTTPS）
 
+⚠️ **重要提示**：必须转发 `X-ZFile-*` headers 到后端服务器。如果缺少这些 headers，认证将失败并返回 401 Unauthorized。
+
 ```nginx
 location /mcp/ {
     proxy_pass http://127.0.0.1:8092/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    
+    # 关键：转发认证 headers
     proxy_set_header X-ZFile-URL $http_x_zfile_url;
     proxy_set_header X-ZFile-User $http_x_zfile_user;
     proxy_set_header X-ZFile-Pass $http_x_zfile_pass;
     proxy_set_header X-ZFile-Storage-Key $http_x_zfile_storage_key;
+    
+    # SSE 特定设置
     proxy_set_header Connection "";
     proxy_buffering off;
     proxy_cache off;
     chunked_transfer_encoding off;
 }
 ```
+
+**Header 转发说明：**
+| Nginx 变量 | 来源 Header | 说明 |
+|------------|-------------|------|
+| `$http_x_zfile_url` | `X-ZFile-URL` | ZFile 服务器地址 |
+| `$http_x_zfile_user` | `X-ZFile-User` | 登录用户名 |
+| `$http_x_zfile_pass` | `X-ZFile-Pass` | 登录密码 |
+| `$http_x_zfile_storage_key` | `X-ZFile-Storage-Key` | 存储源 Key |
 
 ## 📖 使用示例
 

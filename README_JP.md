@@ -105,22 +105,38 @@ python server.py
 
 ### Nginx リバースプロキシ（HTTPS 推奨）
 
+⚠️ **重要**：`X-ZFile-*` ヘッダーをバックエンドサーバーに転送する必要があります。これらのヘッダーがないと、認証が失敗し 401 Unauthorized が返されます。
+
 ```nginx
 location /mcp/ {
     proxy_pass http://127.0.0.1:8092/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    
+    # 重要：認証ヘッダーを転送
     proxy_set_header X-ZFile-URL $http_x_zfile_url;
     proxy_set_header X-ZFile-User $http_x_zfile_user;
     proxy_set_header X-ZFile-Pass $http_x_zfile_pass;
     proxy_set_header X-ZFile-Storage-Key $http_x_zfile_storage_key;
+    
+    # SSE 固有の設定
     proxy_set_header Connection "";
     proxy_buffering off;
     proxy_cache off;
     chunked_transfer_encoding off;
 }
 ```
+
+**ヘッダー転送の説明：**
+| Nginx 変数 | ソースヘッダー | 説明 |
+|------------|----------------|------|
+| `$http_x_zfile_url` | `X-ZFile-URL` | ZFile サーバー URL |
+| `$http_x_zfile_user` | `X-ZFile-User` | ログインユーザー名 |
+| `$http_x_zfile_pass` | `X-ZFile-Pass` | ログインパスワード |
+| `$http_x_zfile_storage_key` | `X-ZFile-Storage-Key` | ストレージソースキー |
 
 ## 📖 使用方法
 
