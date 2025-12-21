@@ -38,3 +38,6 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Data (contains access token)
+data/

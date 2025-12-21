@@ -1,5 +1,7 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
 ## [1.1.0] - 2024-12-22
 
 ### Changed
@@ -29,3 +31,5 @@
 - Auto-generated ACCESS_TOKEN with persistence
 - Docker Hub image: `neosun/zfile-mcp-server`
 - Multi-language documentation (EN, CN, TW, JP)
+- Nginx reverse proxy configuration
+- Security architecture: credentials stored server-side only
