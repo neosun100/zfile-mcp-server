@@ -1,0 +1,12 @@
+services:
+  zfile-mcp:
+    build: .
+    container_name: zfile-mcp
+    restart: always
+    ports:
+      - '8092:8092'
+    environment:
+      - ZFILE_URL=${ZFILE_URL}
+      - ZFILE_USER=${ZFILE_USER}
+      - ZFILE_PASS=${ZFILE_PASS}
+      - ZFILE_STORAGE_KEY=${ZFILE_STORAGE_KEY:-1}
