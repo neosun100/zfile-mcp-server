@@ -15,26 +15,35 @@
 - 🔗 **直連生成** - 建立永久直連
 - ⏱️ **短連生成** - 建立有時效的短連結
 - 🐳 **Docker 就緒** - 使用 Docker Compose 輕鬆部署
-- 🔒 **安全可靠** - 基於 Token 的 ZFile API 認證
+- 🔒 **安全設計** - 憑據儲存在客戶端，通過 Header 傳遞
+
+## 🔐 安全架構
+
+```
+┌─────────────────────────┐         ┌─────────────────┐         ┌─────────┐
+│  MCP 客戶端 (Kiro)       │  SSE    │  MCP 伺服器      │  API    │  ZFile  │
+│  ┌───────────────────┐  │ ──────► │  (無狀態)        │ ──────► │         │
+│  │ 憑據儲存在這裡     │  │ Headers │  不儲存任何憑據   │         │         │
+│  └───────────────────┘  │         │                 │         │         │
+└─────────────────────────┘         └─────────────────┘         └─────────┘
+```
+
+**憑據儲存在你的 MCP 客戶端配置中，而不是伺服器上。** 伺服器是無狀態的，只負責轉發已認證的請求。
 
 ## 🚀 快速開始
 
-### 使用 Docker（推薦）
+### 1. 部署伺服器
 
 ```bash
 # 克隆倉庫
 git clone https://github.com/neosun100/zfile-mcp-server.git
 cd zfile-mcp-server
 
-# 配置環境變數
-cp .env.example .env
-# 編輯 .env 填入你的 ZFile 憑據
-
 # 啟動服務
 docker compose up -d
 ```
 
-### 配置 MCP 客戶端
+### 2. 配置 MCP 客戶端
 
 在你的 MCP 客戶端配置中添加（如 `~/.kiro/settings/mcp.json`）：
 
@@ -43,7 +52,13 @@ docker compose up -d
   "mcpServers": {
     "zfile": {
       "type": "sse",
-      "url": "https://your-domain.com/mcp/sse",
+      "url": "https://your-mcp-server.com/sse",
+      "headers": {
+        "X-ZFile-URL": "https://your-zfile-server.com",
+        "X-ZFile-User": "your_username",
+        "X-ZFile-Pass": "your_password",
+        "X-ZFile-Storage-Key": "1"
+      },
       "autoApprove": ["*"]
     }
   }
@@ -56,36 +71,16 @@ docker compose up -d
 
 - Docker & Docker Compose (v2.0+)
 - 一個運行中的 [ZFile](https://github.com/zfile-dev/zfile) 實例
-- （可選）Nginx 用於反向代理
+- （可選）Nginx 用於 HTTPS 反向代理
 
 ### Docker 部署
-
-1. **克隆並配置**
 
 ```bash
 git clone https://github.com/neosun100/zfile-mcp-server.git
 cd zfile-mcp-server
-cp .env.example .env
-```
-
-2. **編輯 `.env` 檔案**
-
-```env
-ZFILE_URL=https://your-zfile-domain.com
-ZFILE_USER=your_username
-ZFILE_PASS=your_password
-ZFILE_STORAGE_KEY=1
-```
-
-3. **啟動服務**
-
-```bash
 docker compose up -d
-```
 
-4. **驗證**
-
-```bash
+# 驗證
 curl http://localhost:8092/health
 # {"status":"ok"}
 ```
@@ -93,35 +88,33 @@ curl http://localhost:8092/health
 ### 直接運行（開發環境）
 
 ```bash
-# 安裝依賴
 pip install fastapi uvicorn httpx
-
-# 設置環境變數
-export ZFILE_URL=https://your-zfile-domain.com
-export ZFILE_USER=your_username
-export ZFILE_PASS=your_password
-
-# 運行
 python server.py
 ```
 
 ## ⚙️ 配置說明
 
-### 環境變數
+### MCP 客戶端 Headers
 
-| 變數 | 必填 | 預設值 | 說明 |
-|------|------|--------|------|
-| `ZFILE_URL` | ✅ | - | ZFile 伺服器地址 |
-| `ZFILE_USER` | ✅ | - | ZFile 登入用戶名 |
-| `ZFILE_PASS` | ✅ | - | ZFile 登入密碼 |
-| `ZFILE_STORAGE_KEY` | ❌ | `1` | ZFile 中的儲存源 Key |
+| Header | 必填 | 說明 |
+|--------|------|------|
+| `X-ZFile-URL` | ✅ | ZFile 伺服器地址 |
+| `X-ZFile-User` | ✅ | ZFile 登入用戶名 |
+| `X-ZFile-Pass` | ✅ | ZFile 登入密碼 |
+| `X-ZFile-Storage-Key` | ❌ | 儲存源 Key（預設：`1`） |
 
-### Nginx 反向代理（可選）
+### Nginx 反向代理（推薦用於 HTTPS）
 
 ```nginx
 location /mcp/ {
     proxy_pass http://127.0.0.1:8092/;
     proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-ZFile-URL $http_x_zfile_url;
+    proxy_set_header X-ZFile-User $http_x_zfile_user;
+    proxy_set_header X-ZFile-Pass $http_x_zfile_pass;
+    proxy_set_header X-ZFile-Storage-Key $http_x_zfile_storage_key;
     proxy_set_header Connection "";
     proxy_buffering off;
     proxy_cache off;
@@ -149,21 +142,20 @@ location /mcp/ {
 
 "給 /document.pdf 生成直連"
 → 調用 zfile_direct_link(file_path="/document.pdf")
-→ 返回: https://your-domain.com/directlink/1/document.pdf
+→ 返回: https://your-zfile.com/directlink/1/document.pdf
 
 "給 /image.png 建立短連"
 → 調用 zfile_short_link(file_path="/image.png")
-→ 返回: https://your-domain.com/s/AbCdEf
+→ 返回: https://your-zfile.com/s/AbCdEf
 ```
 
 ## 🏗️ 專案結構
 
 ```
 zfile-mcp-server/
-├── server.py           # MCP SSE 伺服器主檔案
+├── server.py           # MCP SSE 伺服器（無狀態）
 ├── Dockerfile          # Docker 構建檔案
 ├── docker-compose.yml  # Docker Compose 配置
-├── .env.example        # 環境變數模板
 ├── .gitignore
 ├── LICENSE
 ├── CHANGELOG.md
@@ -181,12 +173,6 @@ zfile-mcp-server/
 ## 🤝 貢獻指南
 
 歡迎貢獻！請隨時提交 Pull Request。
-
-1. Fork 本倉庫
-2. 建立特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 開啟 Pull Request
 
 ## 📄 許可證
 

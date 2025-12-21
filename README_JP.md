@@ -15,26 +15,35 @@
 - 🔗 **直接リンク生成** - 永続的な直接リンクを作成
 - ⏱️ **短縮リンク生成** - 期限付き短縮リンクを作成
 - 🐳 **Docker 対応** - Docker Compose で簡単デプロイ
-- 🔒 **セキュア** - ZFile API のトークンベース認証
+- 🔒 **セキュア設計** - 認証情報はクライアント側に保存、Header で送信
+
+## 🔐 セキュリティアーキテクチャ
+
+```
+┌─────────────────────────┐         ┌─────────────────┐         ┌─────────┐
+│  MCP クライアント (Kiro) │  SSE    │  MCP サーバー    │  API    │  ZFile  │
+│  ┌───────────────────┐  │ ──────► │  (ステートレス)  │ ──────► │         │
+│  │ 認証情報はここに   │  │ Headers │  認証情報なし    │         │         │
+│  └───────────────────┘  │         │                 │         │         │
+└─────────────────────────┘         └─────────────────┘         └─────────┘
+```
+
+**認証情報は MCP クライアント設定に保存され、サーバーには保存されません。** サーバーはステートレスで、認証済みリクエストを転送するだけです。
 
 ## 🚀 クイックスタート
 
-### Docker を使用（推奨）
+### 1. サーバーをデプロイ
 
 ```bash
 # リポジトリをクローン
 git clone https://github.com/neosun100/zfile-mcp-server.git
 cd zfile-mcp-server
 
-# 環境変数を設定
-cp .env.example .env
-# .env を編集して ZFile の認証情報を入力
-
 # サービスを起動
 docker compose up -d
 ```
 
-### MCP クライアントの設定
+### 2. MCP クライアントを設定
 
 MCP クライアント設定に追加（例：`~/.kiro/settings/mcp.json`）：
 
@@ -43,7 +52,13 @@ MCP クライアント設定に追加（例：`~/.kiro/settings/mcp.json`）：
   "mcpServers": {
     "zfile": {
       "type": "sse",
-      "url": "https://your-domain.com/mcp/sse",
+      "url": "https://your-mcp-server.com/sse",
+      "headers": {
+        "X-ZFile-URL": "https://your-zfile-server.com",
+        "X-ZFile-User": "your_username",
+        "X-ZFile-Pass": "your_password",
+        "X-ZFile-Storage-Key": "1"
+      },
       "autoApprove": ["*"]
     }
   }
@@ -56,36 +71,16 @@ MCP クライアント設定に追加（例：`~/.kiro/settings/mcp.json`）：
 
 - Docker & Docker Compose (v2.0+)
 - 稼働中の [ZFile](https://github.com/zfile-dev/zfile) インスタンス
-- （オプション）リバースプロキシ用の Nginx
+- （オプション）HTTPS 用の Nginx リバースプロキシ
 
 ### Docker デプロイ
-
-1. **クローンと設定**
 
 ```bash
 git clone https://github.com/neosun100/zfile-mcp-server.git
 cd zfile-mcp-server
-cp .env.example .env
-```
-
-2. **`.env` ファイルを編集**
-
-```env
-ZFILE_URL=https://your-zfile-domain.com
-ZFILE_USER=your_username
-ZFILE_PASS=your_password
-ZFILE_STORAGE_KEY=1
-```
-
-3. **サービスを起動**
-
-```bash
 docker compose up -d
-```
 
-4. **確認**
-
-```bash
+# 確認
 curl http://localhost:8092/health
 # {"status":"ok"}
 ```
@@ -93,35 +88,33 @@ curl http://localhost:8092/health
 ### 直接実行（開発環境）
 
 ```bash
-# 依存関係をインストール
 pip install fastapi uvicorn httpx
-
-# 環境変数を設定
-export ZFILE_URL=https://your-zfile-domain.com
-export ZFILE_USER=your_username
-export ZFILE_PASS=your_password
-
-# 実行
 python server.py
 ```
 
 ## ⚙️ 設定
 
-### 環境変数
+### MCP クライアント Headers
 
-| 変数 | 必須 | デフォルト | 説明 |
-|------|------|------------|------|
-| `ZFILE_URL` | ✅ | - | ZFile サーバー URL |
-| `ZFILE_USER` | ✅ | - | ZFile ログインユーザー名 |
-| `ZFILE_PASS` | ✅ | - | ZFile ログインパスワード |
-| `ZFILE_STORAGE_KEY` | ❌ | `1` | ZFile のストレージソースキー |
+| Header | 必須 | 説明 |
+|--------|------|------|
+| `X-ZFile-URL` | ✅ | ZFile サーバー URL |
+| `X-ZFile-User` | ✅ | ZFile ログインユーザー名 |
+| `X-ZFile-Pass` | ✅ | ZFile ログインパスワード |
+| `X-ZFile-Storage-Key` | ❌ | ストレージソースキー（デフォルト：`1`） |
 
-### Nginx リバースプロキシ（オプション）
+### Nginx リバースプロキシ（HTTPS 推奨）
 
 ```nginx
 location /mcp/ {
     proxy_pass http://127.0.0.1:8092/;
     proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-ZFile-URL $http_x_zfile_url;
+    proxy_set_header X-ZFile-User $http_x_zfile_user;
+    proxy_set_header X-ZFile-Pass $http_x_zfile_pass;
+    proxy_set_header X-ZFile-Storage-Key $http_x_zfile_storage_key;
     proxy_set_header Connection "";
     proxy_buffering off;
     proxy_cache off;
@@ -149,21 +142,20 @@ AI アシスタントで：
 
 「/document.pdf の直接リンクを生成」
 → zfile_direct_link(file_path="/document.pdf") を呼び出し
-→ 戻り値: https://your-domain.com/directlink/1/document.pdf
+→ 戻り値: https://your-zfile.com/directlink/1/document.pdf
 
 「/image.png の短縮リンクを作成」
 → zfile_short_link(file_path="/image.png") を呼び出し
-→ 戻り値: https://your-domain.com/s/AbCdEf
+→ 戻り値: https://your-zfile.com/s/AbCdEf
 ```
 
 ## 🏗️ プロジェクト構成
 
 ```
 zfile-mcp-server/
-├── server.py           # MCP SSE サーバーメインファイル
+├── server.py           # MCP SSE サーバー（ステートレス）
 ├── Dockerfile          # Docker ビルドファイル
 ├── docker-compose.yml  # Docker Compose 設定
-├── .env.example        # 環境変数テンプレート
 ├── .gitignore
 ├── LICENSE
 ├── CHANGELOG.md
@@ -181,12 +173,6 @@ zfile-mcp-server/
 ## 🤝 コントリビューション
 
 コントリビューション歓迎！お気軽に Pull Request を送ってください。
-
-1. リポジトリをフォーク
-2. フィーチャーブランチを作成 (`git checkout -b feature/amazing-feature`)
-3. 変更をコミット (`git commit -m 'Add amazing feature'`)
-4. ブランチにプッシュ (`git push origin feature/amazing-feature`)
-5. Pull Request を開く
 
 ## 📄 ライセンス
 
