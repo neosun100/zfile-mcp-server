@@ -1,9 +1,13 @@
+[English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_TW.md) | [日本語](README_JP.md)
+
 # ZFile MCP Server
 
-A Model Context Protocol (MCP) server that enables AI assistants to interact with [ZFile](https://github.com/zfile-dev/zfile) - a powerful online file management system.
+[![Docker Hub](https://img.shields.io/docker/v/neosun/zfile-mcp-server?label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/neosun/zfile-mcp-server)
+[![Docker Pulls](https://img.shields.io/docker/pulls/neosun/zfile-mcp-server?logo=docker)](https://hub.docker.com/r/neosun/zfile-mcp-server)
+[![License](https://img.shields.io/github/license/neosun100/zfile-mcp-server)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/neosun100/zfile-mcp-server?style=social)](https://github.com/neosun100/zfile-mcp-server)
 
-[![Docker Hub](https://img.shields.io/docker/v/neosun/zfile-mcp-server?label=Docker%20Hub)](https://hub.docker.com/r/neosun/zfile-mcp-server)
-[![Docker Pulls](https://img.shields.io/docker/pulls/neosun/zfile-mcp-server)](https://hub.docker.com/r/neosun/zfile-mcp-server)
+A Model Context Protocol (MCP) server that enables AI assistants to interact with [ZFile](https://github.com/zfile-dev/zfile) - a powerful online file management system.
 
 ## Architecture
 
@@ -18,7 +22,7 @@ A Model Context Protocol (MCP) server that enables AI assistants to interact wit
 ```
 
 - **Client**: Only stores ACCESS_TOKEN (for MCP authentication)
-- **Server**: Stores ZFile credentials (username/password) via environment variables
+- **Server**: Stores ZFile credentials via environment variables
 - **Security**: ZFile credentials never exposed to clients
 
 ## Features
@@ -28,8 +32,25 @@ A Model Context Protocol (MCP) server that enables AI assistants to interact wit
 - 🔗 **Direct Links** - Generate permanent direct download links
 - 🔗 **Short Links** - Generate temporary short links (31 days)
 - 📤 **Large File Support** - Get upload URLs for direct large file uploads
+- 🔐 **Secure** - Auto-generated access token, credentials stored server-side
 
 ## Quick Start
+
+```bash
+docker run -d --name zfile-mcp -p 8092:8092 \
+  -e ZFILE_URL=https://your-zfile.com \
+  -e ZFILE_USER=admin \
+  -e ZFILE_PASS=password \
+  -v ./data:/data \
+  neosun/zfile-mcp-server:latest
+```
+
+Get your ACCESS_TOKEN:
+```bash
+docker logs zfile-mcp | grep ACCESS_TOKEN
+```
+
+## Installation
 
 ### Option 1: Docker Hub (Recommended)
 
@@ -66,8 +87,6 @@ services:
       - ./data:/data
 ```
 
-Start:
-
 ```bash
 docker compose up -d
 ```
@@ -78,36 +97,29 @@ docker compose up -d
 git clone https://github.com/neosun100/zfile-mcp-server.git
 cd zfile-mcp-server
 docker build -t zfile-mcp-server .
+docker run -d --name zfile-mcp -p 8092:8092 \
+  -e ZFILE_URL=https://your-zfile.com \
+  -e ZFILE_USER=admin \
+  -e ZFILE_PASS=password \
+  -v ./data:/data \
+  zfile-mcp-server
 ```
 
-## Environment Variables
+## Configuration
 
-| Variable | Required | Description | Example |
+### Environment Variables
+
+| Variable | Required | Description | Default |
 |----------|----------|-------------|---------|
-| `ZFILE_URL` | ✅ | ZFile server URL | `https://zfile.example.com` |
-| `ZFILE_USER` | ✅ | ZFile username | `admin` |
-| `ZFILE_PASS` | ✅ | ZFile password | `your_password` |
-| `ZFILE_STORAGE_KEY` | ❌ | Storage source key (default: 1) | `1` |
-| `ACCESS_TOKEN` | ❌ | Custom access token (auto-generated if not set) | `zfile-xxx` |
+| `ZFILE_URL` | ✅ | ZFile server URL | - |
+| `ZFILE_USER` | ✅ | ZFile username | - |
+| `ZFILE_PASS` | ✅ | ZFile password | - |
+| `ZFILE_STORAGE_KEY` | ❌ | Storage source key | `1` |
+| `ACCESS_TOKEN` | ❌ | Custom access token | Auto-generated |
 
-## Get Access Token
+### MCP Client Configuration
 
-The server automatically generates a secure access token on first startup:
-
-```bash
-docker logs zfile-mcp
-```
-
-Look for:
-```
-==================================================
-ACCESS_TOKEN: zfile-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-==================================================
-```
-
-## Configure MCP Client
-
-Add to your MCP client configuration (e.g., `~/.kiro/settings/mcp.json`):
+Add to `~/.kiro/settings/mcp.json`:
 
 ```json
 {
@@ -123,73 +135,7 @@ Add to your MCP client configuration (e.g., `~/.kiro/settings/mcp.json`):
 }
 ```
 
-## Available Tools
-
-| Tool | Description | Use Case |
-|------|-------------|----------|
-| `zfile_list` | List files in a directory | Browse files |
-| `zfile_upload` | Upload file (base64) with auto direct link | Small files (<5MB) |
-| `zfile_get_upload_url` | Get direct upload URL | Large files |
-| `zfile_direct_link` | Generate permanent direct link | Share files permanently |
-| `zfile_short_link` | Generate 31-day short link | Temporary sharing |
-
-### Tool Details
-
-#### zfile_list
-List files in a ZFile directory.
-
-**Parameters:**
-- `path` (string, optional): Directory path, default "/"
-
-#### zfile_upload
-Upload a small file with automatic direct link generation.
-
-**Parameters:**
-- `file_path` (string, required): Target path in ZFile, e.g., "/uploads/test.txt"
-- `file_content_base64` (string, required): File content encoded in base64
-
-**Returns:**
-```
-✅ Upload success: /test.txt
-📎 Direct link: https://your-zfile-server.com/directlink/1/test.txt
-```
-
-#### zfile_get_upload_url
-Get a direct upload URL for large files.
-
-**Parameters:**
-- `path` (string, optional): Target directory, default "/"
-- `filename` (string, required): File name
-- `size` (integer, required): File size in bytes
-
-**Returns:**
-```
-Upload URL: https://your-zfile-server.com/file/upload/1/largefile.zip
-
-Upload command:
-curl -X PUT 'URL' -F 'file=@/path/to/yourfile'
-```
-
-#### zfile_direct_link
-Generate a permanent direct download link.
-
-**Parameters:**
-- `file_path` (string, required): File path, e.g., "/test.pdf"
-
-#### zfile_short_link
-Generate a short link valid for 31 days.
-
-**Parameters:**
-- `file_path` (string, required): File path, e.g., "/test.pdf"
-
-## Security
-
-- **Access Token**: Auto-generated on first startup, stored in `./data/.access_token`
-- **Token Persistence**: Token survives container restarts (stored in volume)
-- **Credentials**: ZFile credentials stored server-side only, never exposed to clients
-- **No Secrets in Image**: Docker image contains no sensitive data
-
-## Nginx Reverse Proxy (Optional)
+### Nginx Reverse Proxy (Optional)
 
 ```nginx
 location /mcp/ {
@@ -207,6 +153,79 @@ location /mcp/ {
 }
 ```
 
+## Available Tools
+
+| Tool | Description | Use Case |
+|------|-------------|----------|
+| `zfile_list` | List files in a directory | Browse files |
+| `zfile_upload` | Upload file (base64) with auto direct link | Small files (<5MB) |
+| `zfile_get_upload_url` | Get direct upload URL | Large files |
+| `zfile_direct_link` | Generate permanent direct link | Permanent sharing |
+| `zfile_short_link` | Generate 31-day short link | Temporary sharing |
+
+### Usage Examples
+
+**List files:**
+```
+List all files in /documents
+```
+
+**Upload and get link:**
+```
+Upload this file to ZFile and give me the direct link
+```
+
+**Generate direct link:**
+```
+Generate a direct link for /report.pdf
+```
+
+## Tech Stack
+
+- **Runtime**: Python 3.11
+- **Framework**: FastAPI + Uvicorn
+- **Protocol**: MCP (Model Context Protocol) over SSE
+- **HTTP Client**: httpx
+- **Container**: Docker
+
+## Project Structure
+
+```
+zfile-mcp-server/
+├── server.py           # Main MCP server
+├── Dockerfile          # Docker image definition
+├── docker-compose.yml  # Docker Compose config
+├── README.md           # English documentation
+├── README_CN.md        # 简体中文文档
+├── README_TW.md        # 繁體中文文檔
+├── README_JP.md        # 日本語ドキュメント
+├── CHANGELOG.md        # Version history
+├── LICENSE             # MIT License
+└── .gitignore          # Git ignore rules
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
+
 ## License
 
-MIT License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=neosun100/zfile-mcp-server&type=Date)](https://star-history.com/#neosun100/zfile-mcp-server)
+
+## 📱 Follow
+
+![WeChat](https://img.aws.xin/uPic/扫码_搜索联合传播样式-标准色版.png)

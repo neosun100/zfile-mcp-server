@@ -1,9 +1,13 @@
+[English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_TW.md) | [日本語](README_JP.md)
+
 # ZFile MCP Server
 
-一个 Model Context Protocol (MCP) 服务器，让 AI 助手能够与 [ZFile](https://github.com/zfile-dev/zfile) 在线文件管理系统交互。
+[![Docker Hub](https://img.shields.io/docker/v/neosun/zfile-mcp-server?label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/neosun/zfile-mcp-server)
+[![Docker Pulls](https://img.shields.io/docker/pulls/neosun/zfile-mcp-server?logo=docker)](https://hub.docker.com/r/neosun/zfile-mcp-server)
+[![License](https://img.shields.io/github/license/neosun100/zfile-mcp-server)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/neosun100/zfile-mcp-server?style=social)](https://github.com/neosun100/zfile-mcp-server)
 
-[![Docker Hub](https://img.shields.io/docker/v/neosun/zfile-mcp-server?label=Docker%20Hub)](https://hub.docker.com/r/neosun/zfile-mcp-server)
-[![Docker Pulls](https://img.shields.io/docker/pulls/neosun/zfile-mcp-server)](https://hub.docker.com/r/neosun/zfile-mcp-server)
+一个 Model Context Protocol (MCP) 服务器，让 AI 助手能够与 [ZFile](https://github.com/zfile-dev/zfile) 在线文件管理系统交互。
 
 ## 架构
 
@@ -28,8 +32,25 @@
 - 🔗 **永久直链** - 生成永久下载直链
 - 🔗 **临时短链** - 生成 31 天有效期短链
 - 📤 **大文件支持** - 获取上传 URL 直接上传大文件
+- 🔐 **安全可靠** - 自动生成访问令牌，凭据仅存储在服务端
 
 ## 快速开始
+
+```bash
+docker run -d --name zfile-mcp -p 8092:8092 \
+  -e ZFILE_URL=https://your-zfile.com \
+  -e ZFILE_USER=admin \
+  -e ZFILE_PASS=password \
+  -v ./data:/data \
+  neosun/zfile-mcp-server:latest
+```
+
+获取 ACCESS_TOKEN：
+```bash
+docker logs zfile-mcp | grep ACCESS_TOKEN
+```
+
+## 安装部署
 
 ### 方式一：Docker Hub（推荐）
 
@@ -66,8 +87,6 @@ services:
       - ./data:/data
 ```
 
-启动：
-
 ```bash
 docker compose up -d
 ```
@@ -78,36 +97,29 @@ docker compose up -d
 git clone https://github.com/neosun100/zfile-mcp-server.git
 cd zfile-mcp-server
 docker build -t zfile-mcp-server .
+docker run -d --name zfile-mcp -p 8092:8092 \
+  -e ZFILE_URL=https://your-zfile.com \
+  -e ZFILE_USER=admin \
+  -e ZFILE_PASS=password \
+  -v ./data:/data \
+  zfile-mcp-server
 ```
 
-## 环境变量
+## 配置说明
 
-| 变量 | 必填 | 说明 | 示例 |
-|------|------|------|------|
-| `ZFILE_URL` | ✅ | ZFile 服务器地址 | `https://zfile.example.com` |
-| `ZFILE_USER` | ✅ | ZFile 用户名 | `admin` |
-| `ZFILE_PASS` | ✅ | ZFile 密码 | `your_password` |
-| `ZFILE_STORAGE_KEY` | ❌ | 存储源 Key（默认: 1） | `1` |
-| `ACCESS_TOKEN` | ❌ | 自定义访问令牌（不设置则自动生成） | `zfile-xxx` |
+### 环境变量
 
-## 获取访问令牌
+| 变量 | 必填 | 说明 | 默认值 |
+|------|------|------|--------|
+| `ZFILE_URL` | ✅ | ZFile 服务器地址 | - |
+| `ZFILE_USER` | ✅ | ZFile 用户名 | - |
+| `ZFILE_PASS` | ✅ | ZFile 密码 | - |
+| `ZFILE_STORAGE_KEY` | ❌ | 存储源 Key | `1` |
+| `ACCESS_TOKEN` | ❌ | 自定义访问令牌 | 自动生成 |
 
-服务首次启动时会自动生成安全令牌：
+### MCP 客户端配置
 
-```bash
-docker logs zfile-mcp
-```
-
-查找：
-```
-==================================================
-ACCESS_TOKEN: zfile-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-==================================================
-```
-
-## 配置 MCP 客户端
-
-在 MCP 客户端配置文件中添加（如 `~/.kiro/settings/mcp.json`）：
+在 `~/.kiro/settings/mcp.json` 中添加：
 
 ```json
 {
@@ -123,73 +135,7 @@ ACCESS_TOKEN: zfile-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 }
 ```
 
-## 可用工具
-
-| 工具 | 描述 | 适用场景 |
-|------|------|----------|
-| `zfile_list` | 列出目录文件 | 浏览文件 |
-| `zfile_upload` | 上传文件(base64)并返回直链 | 小文件 (<5MB) |
-| `zfile_get_upload_url` | 获取直传 URL | 大文件上传 |
-| `zfile_direct_link` | 生成永久直链 | 永久分享 |
-| `zfile_short_link` | 生成 31 天短链 | 临时分享 |
-
-### 工具详情
-
-#### zfile_list
-列出 ZFile 目录中的文件。
-
-**参数：**
-- `path` (字符串, 可选): 目录路径，默认 "/"
-
-#### zfile_upload
-上传小文件，自动生成直链返回。
-
-**参数：**
-- `file_path` (字符串, 必填): ZFile 中的目标路径，如 "/uploads/test.txt"
-- `file_content_base64` (字符串, 必填): base64 编码的文件内容
-
-**返回：**
-```
-✅ Upload success: /test.txt
-📎 Direct link: https://你的ZFile地址/directlink/1/test.txt
-```
-
-#### zfile_get_upload_url
-获取大文件直传 URL，客户端可直接 PUT 上传。
-
-**参数：**
-- `path` (字符串, 可选): 目标目录，默认 "/"
-- `filename` (字符串, 必填): 文件名
-- `size` (整数, 必填): 文件大小（字节）
-
-**返回：**
-```
-Upload URL: https://你的ZFile地址/file/upload/1/largefile.zip
-
-Upload command:
-curl -X PUT 'URL' -F 'file=@/path/to/yourfile'
-```
-
-#### zfile_direct_link
-生成永久下载直链。
-
-**参数：**
-- `file_path` (字符串, 必填): 文件路径，如 "/test.pdf"
-
-#### zfile_short_link
-生成 31 天有效期短链。
-
-**参数：**
-- `file_path` (字符串, 必填): 文件路径，如 "/test.pdf"
-
-## 安全性
-
-- **访问令牌**: 首次启动自动生成，存储在 `./data/.access_token`
-- **令牌持久化**: 容器重启后令牌不变（存储在 volume 中）
-- **凭据安全**: ZFile 账号密码仅存储在服务端，不暴露给客户端
-- **镜像无敏感信息**: Docker 镜像不包含任何敏感数据
-
-## Nginx 反向代理（可选）
+### Nginx 反向代理（可选）
 
 ```nginx
 location /mcp/ {
@@ -207,6 +153,79 @@ location /mcp/ {
 }
 ```
 
+## 可用工具
+
+| 工具 | 描述 | 适用场景 |
+|------|------|----------|
+| `zfile_list` | 列出目录文件 | 浏览文件 |
+| `zfile_upload` | 上传文件(base64)并返回直链 | 小文件 (<5MB) |
+| `zfile_get_upload_url` | 获取直传 URL | 大文件上传 |
+| `zfile_direct_link` | 生成永久直链 | 永久分享 |
+| `zfile_short_link` | 生成 31 天短链 | 临时分享 |
+
+### 使用示例
+
+**列出文件：**
+```
+列出 /documents 目录的所有文件
+```
+
+**上传并获取链接：**
+```
+把这个文件上传到 ZFile 并给我直链
+```
+
+**生成直链：**
+```
+给 /report.pdf 生成一个直链
+```
+
+## 技术栈
+
+- **运行时**: Python 3.11
+- **框架**: FastAPI + Uvicorn
+- **协议**: MCP (Model Context Protocol) over SSE
+- **HTTP 客户端**: httpx
+- **容器**: Docker
+
+## 项目结构
+
+```
+zfile-mcp-server/
+├── server.py           # MCP 服务器主程序
+├── Dockerfile          # Docker 镜像定义
+├── docker-compose.yml  # Docker Compose 配置
+├── README.md           # 英文文档
+├── README_CN.md        # 简体中文文档
+├── README_TW.md        # 繁體中文文檔
+├── README_JP.md        # 日本語ドキュメント
+├── CHANGELOG.md        # 版本历史
+├── LICENSE             # MIT 许可证
+└── .gitignore          # Git 忽略规则
+```
+
+## 贡献指南
+
+欢迎贡献！请随时提交 Pull Request。
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'Add some amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 打开 Pull Request
+
+## 更新日志
+
+查看 [CHANGELOG.md](CHANGELOG.md) 了解版本历史。
+
 ## 许可证
 
-MIT License
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
+
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=neosun100/zfile-mcp-server&type=Date)](https://star-history.com/#neosun100/zfile-mcp-server)
+
+## 📱 关注公众号
+
+![公众号](https://img.aws.xin/uPic/扫码_搜索联合传播样式-标准色版.png)

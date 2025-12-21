@@ -1,9 +1,13 @@
+[English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_TW.md) | [日本語](README_JP.md)
+
 # ZFile MCP Server
 
-[ZFile](https://github.com/zfile-dev/zfile) オンラインファイル管理システムと AI アシスタントを連携させる Model Context Protocol (MCP) サーバーです。
+[![Docker Hub](https://img.shields.io/docker/v/neosun/zfile-mcp-server?label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/neosun/zfile-mcp-server)
+[![Docker Pulls](https://img.shields.io/docker/pulls/neosun/zfile-mcp-server?logo=docker)](https://hub.docker.com/r/neosun/zfile-mcp-server)
+[![License](https://img.shields.io/github/license/neosun100/zfile-mcp-server)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/neosun100/zfile-mcp-server?style=social)](https://github.com/neosun100/zfile-mcp-server)
 
-[![Docker Hub](https://img.shields.io/docker/v/neosun/zfile-mcp-server?label=Docker%20Hub)](https://hub.docker.com/r/neosun/zfile-mcp-server)
-[![Docker Pulls](https://img.shields.io/docker/pulls/neosun/zfile-mcp-server)](https://hub.docker.com/r/neosun/zfile-mcp-server)
+[ZFile](https://github.com/zfile-dev/zfile) オンラインファイル管理システムと AI アシスタントを連携させる Model Context Protocol (MCP) サーバーです。
 
 ## アーキテクチャ
 
@@ -28,8 +32,25 @@
 - 🔗 **永久直リンク** - 永久ダウンロードリンクを生成
 - 🔗 **短縮リンク** - 31日間有効な短縮リンクを生成
 - 📤 **大容量ファイル対応** - アップロード URL を取得して直接アップロード
+- 🔐 **セキュア** - アクセストークン自動生成、認証情報はサーバー側のみ保存
 
 ## クイックスタート
+
+```bash
+docker run -d --name zfile-mcp -p 8092:8092 \
+  -e ZFILE_URL=https://your-zfile.com \
+  -e ZFILE_USER=admin \
+  -e ZFILE_PASS=password \
+  -v ./data:/data \
+  neosun/zfile-mcp-server:latest
+```
+
+ACCESS_TOKEN を取得：
+```bash
+docker logs zfile-mcp | grep ACCESS_TOKEN
+```
+
+## インストール
 
 ### 方法1：Docker Hub（推奨）
 
@@ -66,8 +87,6 @@ services:
       - ./data:/data
 ```
 
-起動：
-
 ```bash
 docker compose up -d
 ```
@@ -78,36 +97,29 @@ docker compose up -d
 git clone https://github.com/neosun100/zfile-mcp-server.git
 cd zfile-mcp-server
 docker build -t zfile-mcp-server .
+docker run -d --name zfile-mcp -p 8092:8092 \
+  -e ZFILE_URL=https://your-zfile.com \
+  -e ZFILE_USER=admin \
+  -e ZFILE_PASS=password \
+  -v ./data:/data \
+  zfile-mcp-server
 ```
 
-## 環境変数
+## 設定
 
-| 変数 | 必須 | 説明 | 例 |
-|------|------|------|------|
-| `ZFILE_URL` | ✅ | ZFile サーバー URL | `https://zfile.example.com` |
-| `ZFILE_USER` | ✅ | ZFile ユーザー名 | `admin` |
-| `ZFILE_PASS` | ✅ | ZFile パスワード | `your_password` |
-| `ZFILE_STORAGE_KEY` | ❌ | ストレージソース Key（デフォルト: 1） | `1` |
-| `ACCESS_TOKEN` | ❌ | カスタムアクセストークン（未設定時は自動生成） | `zfile-xxx` |
+### 環境変数
 
-## アクセストークンを取得
+| 変数 | 必須 | 説明 | デフォルト |
+|------|------|------|-----------|
+| `ZFILE_URL` | ✅ | ZFile サーバー URL | - |
+| `ZFILE_USER` | ✅ | ZFile ユーザー名 | - |
+| `ZFILE_PASS` | ✅ | ZFile パスワード | - |
+| `ZFILE_STORAGE_KEY` | ❌ | ストレージソース Key | `1` |
+| `ACCESS_TOKEN` | ❌ | カスタムアクセストークン | 自動生成 |
 
-初回起動時にセキュアなトークンが自動生成されます：
+### MCP クライアント設定
 
-```bash
-docker logs zfile-mcp
-```
-
-以下を探してください：
-```
-==================================================
-ACCESS_TOKEN: zfile-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-==================================================
-```
-
-## MCP クライアントを設定
-
-MCP クライアント設定ファイルに追加（例：`~/.kiro/settings/mcp.json`）：
+`~/.kiro/settings/mcp.json` に追加：
 
 ```json
 {
@@ -123,73 +135,7 @@ MCP クライアント設定ファイルに追加（例：`~/.kiro/settings/mcp.
 }
 ```
 
-## 利用可能なツール
-
-| ツール | 説明 | 用途 |
-|--------|------|------|
-| `zfile_list` | ディレクトリ内のファイルを一覧表示 | ファイル閲覧 |
-| `zfile_upload` | ファイルをアップロード(base64)し直リンクを返す | 小さいファイル (<5MB) |
-| `zfile_get_upload_url` | 直接アップロード URL を取得 | 大容量ファイル |
-| `zfile_direct_link` | 永久直リンクを生成 | 永久共有 |
-| `zfile_short_link` | 31日間の短縮リンクを生成 | 一時共有 |
-
-### ツール詳細
-
-#### zfile_list
-ZFile ディレクトリ内のファイルを一覧表示します。
-
-**パラメータ：**
-- `path` (文字列, 任意): ディレクトリパス、デフォルト "/"
-
-#### zfile_upload
-小さいファイルをアップロードし、直リンクを自動生成して返します。
-
-**パラメータ：**
-- `file_path` (文字列, 必須): ZFile 内の保存先パス、例 "/uploads/test.txt"
-- `file_content_base64` (文字列, 必須): base64 エンコードされたファイル内容
-
-**戻り値：**
-```
-✅ Upload success: /test.txt
-📎 Direct link: https://あなたのZFileアドレス/directlink/1/test.txt
-```
-
-#### zfile_get_upload_url
-大容量ファイル用の直接アップロード URL を取得します。
-
-**パラメータ：**
-- `path` (文字列, 任意): 保存先ディレクトリ、デフォルト "/"
-- `filename` (文字列, 必須): ファイル名
-- `size` (整数, 必須): ファイルサイズ（バイト）
-
-**戻り値：**
-```
-Upload URL: https://あなたのZFileアドレス/file/upload/1/largefile.zip
-
-Upload command:
-curl -X PUT 'URL' -F 'file=@/path/to/yourfile'
-```
-
-#### zfile_direct_link
-永久ダウンロードリンクを生成します。
-
-**パラメータ：**
-- `file_path` (文字列, 必須): ファイルパス、例 "/test.pdf"
-
-#### zfile_short_link
-31日間有効な短縮リンクを生成します。
-
-**パラメータ：**
-- `file_path` (文字列, 必須): ファイルパス、例 "/test.pdf"
-
-## セキュリティ
-
-- **アクセストークン**: 初回起動時に自動生成、`./data/.access_token` に保存
-- **トークン永続化**: コンテナ再起動後もトークンは変わりません（volume に保存）
-- **認証情報の安全性**: ZFile のアカウント情報はサーバー側のみに保存、クライアントには公開されません
-- **イメージに機密情報なし**: Docker イメージには機密データは含まれません
-
-## Nginx リバースプロキシ（オプション）
+### Nginx リバースプロキシ（オプション）
 
 ```nginx
 location /mcp/ {
@@ -207,6 +153,79 @@ location /mcp/ {
 }
 ```
 
+## 利用可能なツール
+
+| ツール | 説明 | 用途 |
+|--------|------|------|
+| `zfile_list` | ディレクトリ内のファイルを一覧表示 | ファイル閲覧 |
+| `zfile_upload` | ファイルをアップロード(base64)し直リンクを返す | 小さいファイル (<5MB) |
+| `zfile_get_upload_url` | 直接アップロード URL を取得 | 大容量ファイル |
+| `zfile_direct_link` | 永久直リンクを生成 | 永久共有 |
+| `zfile_short_link` | 31日間の短縮リンクを生成 | 一時共有 |
+
+### 使用例
+
+**ファイル一覧：**
+```
+/documents ディレクトリのすべてのファイルを一覧表示
+```
+
+**アップロードしてリンク取得：**
+```
+このファイルを ZFile にアップロードして直リンクをください
+```
+
+**直リンク生成：**
+```
+/report.pdf の直リンクを生成
+```
+
+## 技術スタック
+
+- **ランタイム**: Python 3.11
+- **フレームワーク**: FastAPI + Uvicorn
+- **プロトコル**: MCP (Model Context Protocol) over SSE
+- **HTTP クライアント**: httpx
+- **コンテナ**: Docker
+
+## プロジェクト構成
+
+```
+zfile-mcp-server/
+├── server.py           # MCP サーバーメイン
+├── Dockerfile          # Docker イメージ定義
+├── docker-compose.yml  # Docker Compose 設定
+├── README.md           # 英語ドキュメント
+├── README_CN.md        # 简体中文文档
+├── README_TW.md        # 繁體中文文檔
+├── README_JP.md        # 日本語ドキュメント
+├── CHANGELOG.md        # バージョン履歴
+├── LICENSE             # MIT ライセンス
+└── .gitignore          # Git 無視ルール
+```
+
+## コントリビューション
+
+コントリビューション歓迎！お気軽に Pull Request を送ってください。
+
+1. リポジトリをフォーク
+2. フィーチャーブランチを作成 (`git checkout -b feature/amazing-feature`)
+3. 変更をコミット (`git commit -m 'Add some amazing feature'`)
+4. ブランチにプッシュ (`git push origin feature/amazing-feature`)
+5. Pull Request を開く
+
+## 変更履歴
+
+バージョン履歴は [CHANGELOG.md](CHANGELOG.md) をご覧ください。
+
 ## ライセンス
 
-MIT License
+このプロジェクトは MIT ライセンスの下で公開されています - 詳細は [LICENSE](LICENSE) ファイルをご覧ください。
+
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=neosun100/zfile-mcp-server&type=Date)](https://star-history.com/#neosun100/zfile-mcp-server)
+
+## 📱 フォロー
+
+![WeChat](https://img.aws.xin/uPic/扫码_搜索联合传播样式-标准色版.png)
