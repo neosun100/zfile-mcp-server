@@ -12,15 +12,6 @@ import uuid
 app = FastAPI()
 sessions = {}
 
-@app.on_event("startup")
-async def startup_event():
-    import sys
-    if ACCESS_TOKEN:
-        sys.stderr.write(f"\n{'='*50}\n")
-        sys.stderr.write(f"ACCESS_TOKEN: {ACCESS_TOKEN}\n")
-        sys.stderr.write(f"{'='*50}\n\n")
-        sys.stderr.flush()
-
 # 从环境变量或文件读取配置
 DEFAULT_ZFILE_URL = os.getenv("ZFILE_URL", "")
 DEFAULT_ZFILE_USER = os.getenv("ZFILE_USER", "")
@@ -30,13 +21,10 @@ DEFAULT_STORAGE_KEY = os.getenv("ZFILE_STORAGE_KEY", "1")
 # ACCESS_TOKEN: 优先环境变量，否则从文件读取或自动生成
 TOKEN_FILE = "/data/.access_token"
 def get_access_token():
-    # 1. 环境变量优先
     if os.getenv("ACCESS_TOKEN"):
         return os.getenv("ACCESS_TOKEN")
-    # 2. 从文件读取
     if os.path.exists(TOKEN_FILE):
         return open(TOKEN_FILE).read().strip()
-    # 3. 首次启动，生成新 token
     import secrets
     token = f"zfile-{secrets.token_hex(16)}"
     os.makedirs(os.path.dirname(TOKEN_FILE), exist_ok=True)
@@ -44,6 +32,15 @@ def get_access_token():
     return token
 
 ACCESS_TOKEN = get_access_token()
+
+@app.on_event("startup")
+async def startup_event():
+    import sys
+    if ACCESS_TOKEN:
+        sys.stderr.write(f"\n{'='*50}\n")
+        sys.stderr.write(f"ACCESS_TOKEN: {ACCESS_TOKEN}\n")
+        sys.stderr.write(f"{'='*50}\n\n")
+        sys.stderr.flush()
 
 
 def get_zfile_token(zfile_url: str, username: str, password: str) -> str:
@@ -89,66 +86,97 @@ def zfile_short_link(zfile_url: str, token: str, storage_key: str, file_path: st
     return f"Failed: {data.get('msg')}"
 
 
-def zfile_upload(zfile_url: str, token: str, storage_key: str, file_path: str, file_content_base64: str) -> str:
-    """Upload file to ZFile using base64 encoded content, return direct link"""
-    import base64
-    import io
-    content = base64.b64decode(file_content_base64)
-    if not file_path.startswith("/"):
-        file_path = "/" + file_path
-    filename = file_path.split('/')[-1]
-    upload_url = f"{zfile_url}/file/upload/{storage_key}{file_path}"
-    
-    # 使用 multipart 格式上传
-    files = {'file': (filename, io.BytesIO(content), 'application/octet-stream')}
-    resp = httpx.put(upload_url, files=files, headers={"zfile-token": token}, timeout=120)
-    data = resp.json() if resp.status_code == 200 else {}
-    
-    if data.get("code") == "0":
-        # 上传成功，生成直链
-        direct_link = zfile_direct_link(zfile_url, token, storage_key, file_path)
-        return f"✅ Upload success: {file_path}\n📎 Direct link: {direct_link}"
-    return f"Upload failed: {resp.status_code} - {resp.text}"
-
-
-def zfile_get_upload_url(zfile_url: str, token: str, storage_key: str, path: str, filename: str, size: int) -> str:
-    """Get upload URL for direct file upload (supports large files)"""
+def zfile_upload(zfile_url: str, token: str, storage_key: str, path: str, filename: str, size: int) -> str:
+    """Get upload URL and return with direct link generation info"""
     resp = httpx.post(f"{zfile_url}/api/file/operator/upload/file", json={
         "storageKey": storage_key, "path": path, "name": filename, "size": size
     }, headers={"zfile-token": token}, timeout=30)
     data = resp.json()
     if data.get("code") == "0":
         url = data.get('data')
-        # 计算上传后的文件路径
         file_path = path.rstrip('/') + '/' + filename if path != '/' else '/' + filename
-        return f"""Upload URL: {url}
+        direct_link_url = f"{zfile_url}/directlink/{storage_key}{file_path}"
+        return f"""📤 Upload URL: {url}
 
-Upload command:
-curl -X PUT '{url}' -F 'file=@/path/to/yourfile'
+📋 Upload command:
+curl -X PUT '{url}' -F 'file=@{filename}'
 
-After upload, get direct link with:
-zfile_direct_link(file_path="{file_path}")"""
+✅ After upload, your direct link will be:
+{direct_link_url}"""
+    return f"Failed: {data.get('msg')}"
+
+
+def zfile_batch_upload(zfile_url: str, token: str, storage_key: str, path: str, files: list) -> str:
+    """Get upload URLs for multiple files"""
+    results = []
+    for f in files:
+        filename = f.get("filename")
+        size = f.get("size", 0)
+        resp = httpx.post(f"{zfile_url}/api/file/operator/upload/file", json={
+            "storageKey": storage_key, "path": path, "name": filename, "size": size
+        }, headers={"zfile-token": token}, timeout=30)
+        data = resp.json()
+        if data.get("code") == "0":
+            url = data.get('data')
+            file_path = path.rstrip('/') + '/' + filename if path != '/' else '/' + filename
+            results.append(f"📄 {filename}\n   URL: {url}\n   Direct: {zfile_url}/directlink/{storage_key}{file_path}")
+        else:
+            results.append(f"❌ {filename}: {data.get('msg')}")
+    
+    return "📤 Batch Upload URLs:\n\n" + "\n\n".join(results) + f"""
+
+📋 Batch upload script:
+for file in *.jpg; do
+  curl -X PUT '{zfile_url}/file/upload/{storage_key}{path}' -F "file=@$file"
+done"""
+
+
+def zfile_direct_links(zfile_url: str, token: str, storage_key: str, file_paths: list) -> str:
+    """Generate direct links for multiple files"""
+    resp = httpx.post(f"{zfile_url}/api/path-link/batch/generate", json={
+        "storageKey": storage_key, "paths": file_paths, "expireTime": 0
+    }, headers={"zfile-token": token}, timeout=30)
+    data = resp.json()
+    if data.get("code") == "0" and data.get("data"):
+        results = []
+        for i, item in enumerate(data["data"]):
+            results.append(f"📄 {file_paths[i]}\n   📎 {item.get('address', 'Failed')}")
+        return "🔗 Direct Links:\n\n" + "\n\n".join(results)
     return f"Failed: {data.get('msg')}"
 
 
 TOOLS = [
     {"name": "zfile_list", "description": "List files in ZFile directory", 
      "inputSchema": {"type": "object", "properties": {"path": {"type": "string", "description": "Directory path, default /", "default": "/"}}}},
-    {"name": "zfile_direct_link", "description": "Generate permanent direct link for a file",
-     "inputSchema": {"type": "object", "properties": {"file_path": {"type": "string", "description": "File path, e.g. /test.pdf"}}, "required": ["file_path"]}},
-    {"name": "zfile_short_link", "description": "Generate short link (31 days) for a file",
-     "inputSchema": {"type": "object", "properties": {"file_path": {"type": "string", "description": "File path, e.g. /test.pdf"}}, "required": ["file_path"]}},
-    {"name": "zfile_upload", "description": "Upload a small file (base64 encoded, for files < 5MB)",
-     "inputSchema": {"type": "object", "properties": {
-         "file_path": {"type": "string", "description": "Target path in ZFile, e.g. /uploads/test.txt"},
-         "file_content_base64": {"type": "string", "description": "File content encoded in base64"}
-     }, "required": ["file_path", "file_content_base64"]}},
-    {"name": "zfile_get_upload_url", "description": "Get direct upload URL for large files. Client can then PUT file directly to this URL.",
+    
+    {"name": "zfile_upload", "description": "Get upload URL for a file. Returns URL for direct PUT upload and the resulting direct link.",
      "inputSchema": {"type": "object", "properties": {
          "path": {"type": "string", "description": "Target directory, e.g. /uploads/", "default": "/"},
          "filename": {"type": "string", "description": "File name, e.g. app.apk"},
-         "size": {"type": "integer", "description": "File size in bytes"}
-     }, "required": ["filename", "size"]}},
+         "size": {"type": "integer", "description": "File size in bytes", "default": 0}
+     }, "required": ["filename"]}},
+    
+    {"name": "zfile_batch_upload", "description": "Get upload URLs for multiple files at once",
+     "inputSchema": {"type": "object", "properties": {
+         "path": {"type": "string", "description": "Target directory", "default": "/"},
+         "files": {"type": "array", "description": "Array of {filename, size} objects", "items": {
+             "type": "object", "properties": {
+                 "filename": {"type": "string"},
+                 "size": {"type": "integer", "default": 0}
+             }, "required": ["filename"]
+         }}
+     }, "required": ["files"]}},
+    
+    {"name": "zfile_direct_link", "description": "Generate permanent direct link for a file",
+     "inputSchema": {"type": "object", "properties": {"file_path": {"type": "string", "description": "File path, e.g. /test.pdf"}}, "required": ["file_path"]}},
+    
+    {"name": "zfile_direct_links", "description": "Generate permanent direct links for multiple files",
+     "inputSchema": {"type": "object", "properties": {
+         "file_paths": {"type": "array", "description": "Array of file paths", "items": {"type": "string"}}
+     }, "required": ["file_paths"]}},
+    
+    {"name": "zfile_short_link", "description": "Generate short link (31 days) for a file",
+     "inputSchema": {"type": "object", "properties": {"file_path": {"type": "string", "description": "File path, e.g. /test.pdf"}}, "required": ["file_path"]}},
 ]
 
 
@@ -161,7 +189,7 @@ def handle_message(msg: dict, config: dict) -> dict:
         return {"jsonrpc": "2.0", "id": msg_id, "result": {
             "protocolVersion": "2024-11-05",
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "zfile-mcp", "version": "1.0.0"}
+            "serverInfo": {"name": "zfile-mcp", "version": "1.1.0"}
         }}
     elif method == "tools/list":
         return {"jsonrpc": "2.0", "id": msg_id, "result": {"tools": TOOLS}}
@@ -178,14 +206,16 @@ def handle_message(msg: dict, config: dict) -> dict:
         try:
             if name == "zfile_list":
                 result = zfile_list(zfile_url, token, storage_key, args.get("path", "/"))
+            elif name == "zfile_upload":
+                result = zfile_upload(zfile_url, token, storage_key, args.get("path", "/"), args["filename"], args.get("size", 0))
+            elif name == "zfile_batch_upload":
+                result = zfile_batch_upload(zfile_url, token, storage_key, args.get("path", "/"), args["files"])
             elif name == "zfile_direct_link":
                 result = zfile_direct_link(zfile_url, token, storage_key, args["file_path"])
+            elif name == "zfile_direct_links":
+                result = zfile_direct_links(zfile_url, token, storage_key, args["file_paths"])
             elif name == "zfile_short_link":
                 result = zfile_short_link(zfile_url, token, storage_key, args["file_path"])
-            elif name == "zfile_upload":
-                result = zfile_upload(zfile_url, token, storage_key, args["file_path"], args["file_content_base64"])
-            elif name == "zfile_get_upload_url":
-                result = zfile_get_upload_url(zfile_url, token, storage_key, args.get("path", "/"), args["filename"], args["size"])
             else:
                 result = f"Unknown tool: {name}"
             return {"jsonrpc": "2.0", "id": msg_id, "result": {"content": [{"type": "text", "text": result}]}}
@@ -198,11 +228,9 @@ def handle_message(msg: dict, config: dict) -> dict:
 
 @app.api_route("/sse", methods=["GET", "POST", "HEAD"])
 async def sse_endpoint(request: Request, token: str = None):
-    # 验证访问 token
     if ACCESS_TOKEN and token != ACCESS_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid access token")
     
-    # HEAD 请求只返回 200，不建立 SSE 连接
     if request.method == "HEAD":
         return {"status": "ok"}
     
@@ -212,10 +240,10 @@ async def sse_endpoint(request: Request, token: str = None):
     storage_key = DEFAULT_STORAGE_KEY
     
     if not all([zfile_url, zfile_user, zfile_pass]):
-        raise HTTPException(status_code=500, detail="Server not configured. Set ZFILE_URL, ZFILE_USER, ZFILE_PASS env vars.")
+        raise HTTPException(status_code=500, detail="Server not configured")
     
     try:
-        token = get_zfile_token(zfile_url, zfile_user, zfile_pass)
+        zfile_token = get_zfile_token(zfile_url, zfile_user, zfile_pass)
     except Exception as e:
         raise HTTPException(status_code=401, detail=str(e))
     
@@ -223,11 +251,10 @@ async def sse_endpoint(request: Request, token: str = None):
     queue = asyncio.Queue()
     sessions[session_id] = {
         "queue": queue,
-        "config": {"zfile_url": zfile_url, "token": token, "storage_key": storage_key}
+        "config": {"zfile_url": zfile_url, "token": zfile_token, "storage_key": storage_key}
     }
     
     async def event_generator():
-        # 返回完整的 message endpoint URL (使用原始请求的 scheme)
         scheme = request.headers.get("x-forwarded-proto", "https")
         host = request.headers.get("x-forwarded-host", request.headers.get("host", ""))
         yield f"event: endpoint\ndata: {scheme}://{host}/mcp/message?session_id={session_id}\n\n"
@@ -266,8 +293,4 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    if ACCESS_TOKEN:
-        print(f"\n{'='*50}")
-        print(f"ACCESS_TOKEN: {ACCESS_TOKEN}")
-        print(f"{'='*50}\n")
     uvicorn.run(app, host="0.0.0.0", port=8092)

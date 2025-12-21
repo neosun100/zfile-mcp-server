@@ -28,10 +28,10 @@ A Model Context Protocol (MCP) server that enables AI assistants to interact wit
 ## Features
 
 - 📁 **List Files** - Browse directories in ZFile
-- ⬆️ **Upload Files** - Upload files with automatic direct link generation
-- 🔗 **Direct Links** - Generate permanent direct download links
+- 📤 **Upload Files** - Get upload URLs (no base64, saves context tokens)
+- 📤 **Batch Upload** - Get multiple upload URLs at once
+- 🔗 **Direct Links** - Generate permanent direct download links (single or batch)
 - 🔗 **Short Links** - Generate temporary short links (31 days)
-- 📤 **Large File Support** - Get upload URLs for direct large file uploads
 - 🔐 **Secure** - Auto-generated access token, credentials stored server-side
 
 ## Quick Start
@@ -68,8 +68,6 @@ docker run -d \
 
 ### Option 2: Docker Compose
 
-Create `docker-compose.yml`:
-
 ```yaml
 services:
   zfile-mcp:
@@ -89,20 +87,6 @@ services:
 
 ```bash
 docker compose up -d
-```
-
-### Option 3: Build from Source
-
-```bash
-git clone https://github.com/neosun100/zfile-mcp-server.git
-cd zfile-mcp-server
-docker build -t zfile-mcp-server .
-docker run -d --name zfile-mcp -p 8092:8092 \
-  -e ZFILE_URL=https://your-zfile.com \
-  -e ZFILE_USER=admin \
-  -e ZFILE_PASS=password \
-  -v ./data:/data \
-  zfile-mcp-server
 ```
 
 ## Configuration
@@ -135,97 +119,43 @@ Add to `~/.kiro/settings/mcp.json`:
 }
 ```
 
-### Nginx Reverse Proxy (Optional)
+## Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `zfile_list` | List files in a directory |
+| `zfile_upload` | Get upload URL for a file (returns URL + direct link) |
+| `zfile_batch_upload` | Get upload URLs for multiple files |
+| `zfile_direct_link` | Generate permanent direct link for a file |
+| `zfile_direct_links` | Generate direct links for multiple files |
+| `zfile_short_link` | Generate 31-day short link |
+
+### Why URL-based Upload?
+
+Base64 upload consumes context tokens:
+- 1MB file → ~350K tokens
+- 5MB file → ~1.75M tokens (exceeds most context limits!)
+
+URL-based upload: **0 tokens** - client uploads directly to ZFile.
+
+## Nginx Reverse Proxy
 
 ```nginx
 location /mcp/ {
     proxy_pass http://127.0.0.1:8092/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Forwarded-Host $host;
-    proxy_set_header Connection '';
     proxy_buffering off;
     proxy_cache off;
-    chunked_transfer_encoding off;
 }
 ```
 
-## Available Tools
-
-| Tool | Description | Use Case |
-|------|-------------|----------|
-| `zfile_list` | List files in a directory | Browse files |
-| `zfile_upload` | Upload file (base64) with auto direct link | Small files (<5MB) |
-| `zfile_get_upload_url` | Get direct upload URL | Large files |
-| `zfile_direct_link` | Generate permanent direct link | Permanent sharing |
-| `zfile_short_link` | Generate 31-day short link | Temporary sharing |
-
-### Usage Examples
-
-**List files:**
-```
-List all files in /documents
-```
-
-**Upload and get link:**
-```
-Upload this file to ZFile and give me the direct link
-```
-
-**Generate direct link:**
-```
-Generate a direct link for /report.pdf
-```
-
-## Tech Stack
-
-- **Runtime**: Python 3.11
-- **Framework**: FastAPI + Uvicorn
-- **Protocol**: MCP (Model Context Protocol) over SSE
-- **HTTP Client**: httpx
-- **Container**: Docker
-
-## Project Structure
-
-```
-zfile-mcp-server/
-├── server.py           # Main MCP server
-├── Dockerfile          # Docker image definition
-├── docker-compose.yml  # Docker Compose config
-├── README.md           # English documentation
-├── README_CN.md        # 简体中文文档
-├── README_TW.md        # 繁體中文文檔
-├── README_JP.md        # 日本語ドキュメント
-├── CHANGELOG.md        # Version history
-├── LICENSE             # MIT License
-└── .gitignore          # Git ignore rules
-```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history.
-
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE)
 
 ## ⭐ Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=neosun100/zfile-mcp-server&type=Date)](https://star-history.com/#neosun100/zfile-mcp-server)
-
-## 📱 Follow
-
-![WeChat](https://img.aws.xin/uPic/扫码_搜索联合传播样式-标准色版.png)
