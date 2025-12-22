@@ -106,7 +106,7 @@ git clone https://github.com/neosun100/zfile-mcp-server.git
 cd zfile-mcp-server
 
 # 安装依赖
-pip install fastapi uvicorn httpx
+pip install -r requirements.txt
 
 # 设置环境变量
 export ZFILE_URL=https://your-zfile.com
@@ -117,31 +117,17 @@ export ZFILE_PASS=password
 python server.py
 ```
 
-### 方式四：构建 Docker 镜像
-
-```bash
-git clone https://github.com/neosun100/zfile-mcp-server.git
-cd zfile-mcp-server
-docker build -t zfile-mcp-server .
-docker run -d --name zfile-mcp -p 8092:8092 \
-  -e ZFILE_URL=https://your-zfile.com \
-  -e ZFILE_USER=admin \
-  -e ZFILE_PASS=password \
-  -v ./data:/data \
-  zfile-mcp-server
-```
-
 ## ⚙️ 配置说明
 
 ### 环境变量
 
 | 变量 | 必需 | 说明 | 默认值 |
 |------|------|------|--------|
-| `ZFILE_URL` | ✅ | ZFile 服务器地址（如 `https://zfile.example.com`） | - |
+| `ZFILE_URL` | ✅ | ZFile 服务器地址 | - |
 | `ZFILE_USER` | ✅ | ZFile 管理员用户名 | - |
 | `ZFILE_PASS` | ✅ | ZFile 管理员密码 | - |
 | `ZFILE_STORAGE_KEY` | ❌ | 存储源 Key | `1` |
-| `ACCESS_TOKEN` | ❌ | 自定义访问令牌（不设置则自动生成） | 自动 |
+| `ACCESS_TOKEN` | ❌ | 自定义访问令牌 | 自动生成 |
 
 ### MCP 客户端配置
 
@@ -178,21 +164,73 @@ docker run -d --name zfile-mcp -p 8092:8092 \
 }
 ```
 
-### Nginx 反向代理（可选）
+## 🌐 反向代理配置
+
+### 方案 A：Cloudflare Tunnel（推荐）
+
+Cloudflare Tunnel 提供安全访问，无需暴露端口。在 Cloudflare Dashboard 配置：
+
+| 公共主机名 | 服务 |
+|-----------|------|
+| `zfile.example.com` | `http://localhost:8090` (ZFile) |
+| `zfile.example.com/mcp/*` | `http://localhost:8092` (MCP Server) |
+
+**在 Cloudflare Zero Trust 中配置路径路由：**
+1. 进入 **Zero Trust** → **Networks** → **Tunnels**
+2. 选择你的隧道 → **Public Hostname**
+3. 添加两条记录：
+   - Path: `/mcp/*` → Service: `http://localhost:8092`
+   - Path: (空) → Service: `http://localhost:8090`
+
+### 方案 B：Nginx 反向代理
 
 ```nginx
-location /mcp/ {
-    proxy_pass http://127.0.0.1:8092/;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-Host $host;
-    proxy_set_header Connection '';
-    proxy_buffering off;
-    proxy_cache off;
-    chunked_transfer_encoding off;
+server {
+    listen 443 ssl;
+    server_name zfile.example.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    # MCP Server（SSE 需要特殊处理）
+    location /mcp/ {
+        proxy_pass http://127.0.0.1:8092/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding off;
+        proxy_read_timeout 86400s;
+    }
+
+    # ZFile 主应用
+    location / {
+        proxy_pass http://127.0.0.1:8090/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 10G;
+    }
+}
+```
+
+### 方案 C：Caddy
+
+```caddyfile
+zfile.example.com {
+    handle_path /mcp/* {
+        reverse_proxy localhost:8092
+    }
+    
+    handle {
+        reverse_proxy localhost:8090
+    }
 }
 ```
 
@@ -224,11 +262,6 @@ location /mcp/ {
 为 /report.pdf 生成直链
 ```
 
-**批量操作：**
-```
-为 /documents 目录下所有 PDF 文件生成直链
-```
-
 ### 为什么用 URL 上传？
 
 Base64 上传会消耗上下文 token：
@@ -244,6 +277,8 @@ zfile-mcp-server/
 ├── server.py           # MCP 服务器主程序
 ├── Dockerfile          # Docker 镜像定义
 ├── docker-compose.yml  # Docker Compose 配置
+├── requirements.txt    # Python 依赖
+├── .env.example        # 环境变量模板
 ├── README.md           # English documentation
 ├── README_CN.md        # 简体中文文档
 ├── README_TW.md        # 繁體中文文檔
@@ -264,12 +299,6 @@ zfile-mcp-server/
 ## 🤝 贡献指南
 
 欢迎贡献！请随时提交 Pull Request。
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 打开 Pull Request
 
 ## 📋 更新日志
 

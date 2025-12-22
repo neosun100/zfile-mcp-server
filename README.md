@@ -106,7 +106,7 @@ git clone https://github.com/neosun100/zfile-mcp-server.git
 cd zfile-mcp-server
 
 # Install dependencies
-pip install fastapi uvicorn httpx
+pip install -r requirements.txt
 
 # Set environment variables
 export ZFILE_URL=https://your-zfile.com
@@ -115,20 +115,6 @@ export ZFILE_PASS=password
 
 # Run
 python server.py
-```
-
-### Option 4: Build Docker Image
-
-```bash
-git clone https://github.com/neosun100/zfile-mcp-server.git
-cd zfile-mcp-server
-docker build -t zfile-mcp-server .
-docker run -d --name zfile-mcp -p 8092:8092 \
-  -e ZFILE_URL=https://your-zfile.com \
-  -e ZFILE_USER=admin \
-  -e ZFILE_PASS=password \
-  -v ./data:/data \
-  zfile-mcp-server
 ```
 
 ## ⚙️ Configuration
@@ -178,21 +164,73 @@ Add to Claude Desktop config:
 }
 ```
 
-### Nginx Reverse Proxy (Optional)
+## 🌐 Reverse Proxy Configuration
+
+### Option A: Cloudflare Tunnel (Recommended)
+
+Cloudflare Tunnel provides secure access without exposing ports. Configure in Cloudflare Dashboard:
+
+| Public hostname | Service |
+|-----------------|---------|
+| `zfile.example.com` | `http://localhost:8090` (ZFile) |
+| `zfile.example.com/mcp/*` | `http://localhost:8092` (MCP Server) |
+
+**Path-based routing in Cloudflare Zero Trust:**
+1. Go to **Zero Trust** → **Networks** → **Tunnels**
+2. Select your tunnel → **Public Hostname**
+3. Add two entries:
+   - Path: `/mcp/*` → Service: `http://localhost:8092`
+   - Path: (empty) → Service: `http://localhost:8090`
+
+### Option B: Nginx Reverse Proxy
 
 ```nginx
-location /mcp/ {
-    proxy_pass http://127.0.0.1:8092/;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-Host $host;
-    proxy_set_header Connection '';
-    proxy_buffering off;
-    proxy_cache off;
-    chunked_transfer_encoding off;
+server {
+    listen 443 ssl;
+    server_name zfile.example.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    # MCP Server (SSE requires special handling)
+    location /mcp/ {
+        proxy_pass http://127.0.0.1:8092/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding off;
+        proxy_read_timeout 86400s;
+    }
+
+    # ZFile main application
+    location / {
+        proxy_pass http://127.0.0.1:8090/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 10G;
+    }
+}
+```
+
+### Option C: Caddy
+
+```caddyfile
+zfile.example.com {
+    handle_path /mcp/* {
+        reverse_proxy localhost:8092
+    }
+    
+    handle {
+        reverse_proxy localhost:8090
+    }
 }
 ```
 
@@ -244,6 +282,8 @@ zfile-mcp-server/
 ├── server.py           # Main MCP server implementation
 ├── Dockerfile          # Docker image definition
 ├── docker-compose.yml  # Docker Compose configuration
+├── requirements.txt    # Python dependencies
+├── .env.example        # Environment variables template
 ├── README.md           # English documentation
 ├── README_CN.md        # 简体中文文档
 ├── README_TW.md        # 繁體中文文檔
