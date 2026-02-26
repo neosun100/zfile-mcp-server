@@ -1,7 +1,8 @@
 [English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_TW.md) | [日本語](README_JP.md)
 
 <div align="center">
-  <h1>🗂️ ZFile MCP Server</h1>
+  <img src="logo.png" alt="ZFile MCP Server" width="180" />
+  <h1>ZFile MCP Server</h1>
   <p>讓 AI 助手能夠與 ZFile 網盤系統互動的 MCP 伺服器</p>
 
   [![Docker Hub](https://img.shields.io/docker/v/neosun/zfile-mcp-server?label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/neosun/zfile-mcp-server)
