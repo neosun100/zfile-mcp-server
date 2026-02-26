@@ -14,12 +14,14 @@
 
 ## ✨ Features
 
-- 📁 **List Files** - Browse directories in ZFile
-- 📤 **Upload Files** - Get upload URLs (no base64, saves context tokens)
-- 📤 **Batch Upload** - Get multiple upload URLs at once
-- 🔗 **Direct Links** - Generate permanent direct download links (single or batch)
-- 🔗 **Short Links** - Generate temporary short links (31 days)
-- 🔐 **Secure** - Auto-generated access token, credentials stored server-side
+- 📁 **List Files** — Browse directories in ZFile
+- 📤 **Upload Files** — Get upload URLs (no base64, saves context tokens)
+- 📤 **Batch Upload** — Get multiple upload URLs at once
+- 📦 **Chunked Upload** — Large file upload via chunks (Cloudflare-friendly, auto-merge)
+- 🔗 **Direct Links** — Generate permanent direct download links (single or batch)
+- 🔗 **Short Links** — Generate temporary short links (31 days)
+- 🔐 **Secure** — Auto-generated access token, credentials stored server-side
+- 🌐 **Multi-Protocol** — SSE (Kiro, Claude Desktop) + Streamable HTTP (Gemini CLI)
 
 ## 🏗️ Architecture
 
@@ -34,9 +36,9 @@
 ```
 
 **Security Model:**
-- Client only stores `ACCESS_TOKEN` (for MCP authentication)
-- Server stores ZFile credentials via environment variables
-- ZFile credentials are never exposed to clients
+- 🔒 Client only stores `ACCESS_TOKEN` (for MCP authentication)
+- 🔒 Server stores ZFile credentials via environment variables
+- 🔒 ZFile credentials are never exposed to clients
 
 ## 🚀 Quick Start
 
@@ -87,6 +89,9 @@ services:
       - ZFILE_USER=your_username
       - ZFILE_PASS=your_password
       - ZFILE_STORAGE_KEY=1
+      # - ACCESS_TOKEN=            # auto-generated if not set
+      # - CHUNK_SIZE_MB=10         # chunk size for large file upload (default: 10)
+      # - MCP_SERVER_URL=          # optional: external URL for chunked upload commands
     volumes:
       - ./data:/data
 ```
@@ -97,23 +102,17 @@ docker compose up -d
 
 ### Option 3: Run from Source
 
-**Requirements:**
-- Python 3.11+
-- pip
+**Requirements:** Python 3.11+
 
 ```bash
 git clone https://github.com/neosun100/zfile-mcp-server.git
 cd zfile-mcp-server
-
-# Install dependencies
 pip install -r requirements.txt
 
-# Set environment variables
 export ZFILE_URL=https://your-zfile.com
 export ZFILE_USER=admin
 export ZFILE_PASS=password
 
-# Run
 python server.py
 ```
 
@@ -123,15 +122,19 @@ python server.py
 
 | Variable | Required | Description | Default |
 |----------|----------|-------------|---------|
-| `ZFILE_URL` | ✅ | ZFile server URL (e.g., `https://zfile.example.com`) | - |
-| `ZFILE_USER` | ✅ | ZFile admin username | - |
-| `ZFILE_PASS` | ✅ | ZFile admin password | - |
+| `ZFILE_URL` | ✅ | ZFile server URL (e.g., `https://zfile.example.com`) | — |
+| `ZFILE_USER` | ✅ | ZFile admin username | — |
+| `ZFILE_PASS` | ✅ | ZFile admin password | — |
 | `ZFILE_STORAGE_KEY` | ❌ | Storage source key | `1` |
 | `ACCESS_TOKEN` | ❌ | Custom access token (auto-generated if not set) | Auto |
+| `CHUNK_SIZE_MB` | ❌ | Chunk size for large file upload | `10` |
+| `MCP_SERVER_URL` | ❌ | External URL override for chunked upload commands (useful behind reverse proxies) | Auto-detect |
+
+> 💡 **Tip:** If `MCP_SERVER_URL` is not set, the server auto-detects its URL from request headers (`X-Forwarded-Host`, `X-Forwarded-Proto`). Set it explicitly when behind complex proxy setups.
 
 ### MCP Client Configuration
 
-#### Kiro CLI
+#### 🟢 Kiro CLI
 
 Add to `~/.kiro/settings/mcp.json`:
 
@@ -149,9 +152,9 @@ Add to `~/.kiro/settings/mcp.json`:
 }
 ```
 
-#### Claude Desktop
+#### 🟣 Claude Desktop
 
-Add to Claude Desktop config:
+Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
@@ -159,6 +162,48 @@ Add to Claude Desktop config:
     "zfile": {
       "type": "sse",
       "url": "https://your-server.com/mcp/sse?token=YOUR_ACCESS_TOKEN"
+    }
+  }
+}
+```
+
+#### 🔵 Google Gemini CLI
+
+Gemini CLI uses Streamable HTTP protocol. Add to `~/.gemini/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "zfile": {
+      "uri": "https://your-server.com/mcp?token=YOUR_ACCESS_TOKEN"
+    }
+  }
+}
+```
+
+#### 🟡 Cursor
+
+Add to `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "zfile": {
+      "url": "https://your-server.com/mcp/sse?token=YOUR_ACCESS_TOKEN"
+    }
+  }
+}
+```
+
+#### 🔴 Windsurf
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "zfile": {
+      "serverUrl": "https://your-server.com/mcp/sse?token=YOUR_ACCESS_TOKEN"
     }
   }
 }
@@ -181,6 +226,8 @@ Cloudflare Tunnel provides secure access without exposing ports. Configure in Cl
 3. Add two entries:
    - Path: `/mcp/*` → Service: `http://localhost:8092`
    - Path: (empty) → Service: `http://localhost:8090`
+
+> ⚠️ **Cloudflare Timeout:** Cloudflare has a 100s proxy read timeout. For large file uploads, use chunked upload (`zfile_chunked_upload`) with `CHUNK_SIZE_MB=10` (default) to keep each chunk within the timeout.
 
 ### Option B: Nginx Reverse Proxy
 
@@ -238,12 +285,14 @@ zfile.example.com {
 
 | Tool | Description |
 |------|-------------|
-| `zfile_list` | List files in a directory |
-| `zfile_upload` | Get upload URL for a file (returns URL + direct link) |
-| `zfile_batch_upload` | Get upload URLs for multiple files |
-| `zfile_direct_link` | Generate permanent direct link for a file |
-| `zfile_direct_links` | Generate direct links for multiple files |
-| `zfile_short_link` | Generate 31-day short link |
+| 📁 `zfile_list` | List files in a directory |
+| 📤 `zfile_upload` | Get upload URL for a single file (< 10MB) |
+| 📤 `zfile_batch_upload` | Get upload URLs for multiple files at once |
+| 📦 `zfile_chunked_upload` | Initialize chunked upload for large files (> 10MB) |
+| 📊 `zfile_chunked_upload_status` | Check chunked upload progress |
+| 🔗 `zfile_direct_link` | Generate permanent direct link for a file |
+| 🔗 `zfile_direct_links` | Generate direct links for multiple files |
+| 🔗 `zfile_short_link` | Generate 31-day short link |
 
 ### Usage Examples
 
@@ -252,9 +301,14 @@ zfile.example.com {
 List all files in /documents
 ```
 
-**Upload a file:**
+**Upload a small file:**
 ```
 I need to upload app.apk to /releases folder
+```
+
+**Upload a large file (chunked):**
+```
+Upload a 200MB video file to /videos
 ```
 
 **Generate direct link:**
@@ -267,13 +321,28 @@ Generate a direct link for /report.pdf
 Generate direct links for all PDF files in /documents
 ```
 
-### Why URL-based Upload?
+### 💡 Why URL-based Upload?
 
 Base64 upload consumes context tokens:
 - 1MB file → ~350K tokens
 - 5MB file → ~1.75M tokens (exceeds most context limits!)
 
-URL-based upload: **0 tokens** - client uploads directly to ZFile.
+URL-based upload: **0 tokens** — client uploads directly to ZFile.
+
+### 📦 Chunked Upload Flow
+
+For files > 10MB (especially behind Cloudflare):
+
+```
+1. AI calls zfile_chunked_upload → gets upload_id + curl commands
+2. Client splits file into 10MB chunks
+3. Client POSTs each chunk to /upload/chunk endpoint
+4. Server auto-merges all chunks when complete
+5. Server uploads merged file to ZFile
+6. Returns direct link ✅
+```
+
+> 💡 Chunked upload returns ready-to-use `curl` commands with the real server URL and token — just copy and run.
 
 ## 📁 Project Structure
 
@@ -297,7 +366,7 @@ zfile-mcp-server/
 
 - **Runtime:** Python 3.11
 - **Framework:** FastAPI + Uvicorn
-- **Protocol:** MCP (Model Context Protocol) over SSE
+- **Protocol:** MCP (Model Context Protocol) — SSE + Streamable HTTP
 - **HTTP Client:** httpx
 - **Container:** Docker
 
