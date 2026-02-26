@@ -2,29 +2,25 @@ FROM python:3.11-slim
 
 LABEL maintainer="neosun100"
 LABEL description="ZFile MCP Server - AI assistant integration for ZFile"
-LABEL version="1.1.0"
+LABEL version="1.3.0"
 
 WORKDIR /app
 
-# Install dependencies
-RUN pip install --no-cache-dir fastapi uvicorn httpx
+RUN pip install --no-cache-dir fastapi uvicorn httpx python-multipart
 
-# Copy server code
 COPY server.py .
 
-# Create data directory for token persistence
-RUN mkdir -p /data
+RUN mkdir -p /data /tmp/zfile-chunks
 
-# Environment variables (to be set at runtime)
 ENV ZFILE_URL=""
 ENV ZFILE_USER=""
 ENV ZFILE_PASS=""
 ENV ZFILE_STORAGE_KEY="1"
 ENV ACCESS_TOKEN=""
+ENV CHUNK_SIZE_MB="50"
 
 EXPOSE 8092
 
-# Health check using Python (no curl needed)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://localhost:8092/health', timeout=5).raise_for_status()" || exit 1
 

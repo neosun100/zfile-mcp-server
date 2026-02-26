@@ -6,9 +6,13 @@ services:
     ports:
       - '8092:8092'
     environment:
-      - ZFILE_URL=https://your-zfile-server.com
-      - ZFILE_USER=your_username
+      - ZFILE_URL=http://host.docker.internal:8090
+      - ZFILE_USER=admin
       - ZFILE_PASS=your_password
       - ZFILE_STORAGE_KEY=1
+      # - ACCESS_TOKEN=  # auto-generated if not set
+      # - CHUNK_SIZE_MB=50  # chunk size for large file upload
     volumes:
       - ./data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
