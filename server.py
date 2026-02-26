@@ -17,7 +17,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 import asyncio
 import uuid
 
-VERSION = "1.3.0"
+VERSION = "1.3.2"
 app = FastAPI()
 sessions = {}
 
@@ -30,7 +30,8 @@ DEFAULT_ZFILE_USER = os.getenv("ZFILE_USER", "")
 DEFAULT_ZFILE_PASS = os.getenv("ZFILE_PASS", "")
 DEFAULT_STORAGE_KEY = os.getenv("ZFILE_STORAGE_KEY", "1")
 CHUNK_DIR = os.getenv("CHUNK_DIR", "/tmp/zfile-chunks")
-CHUNK_SIZE_MB = int(os.getenv("CHUNK_SIZE_MB", "50"))
+CHUNK_SIZE_MB = int(os.getenv("CHUNK_SIZE_MB", "10"))
+MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "")  # e.g. http://localhost:8092
 
 TOKEN_FILE = "/data/.access_token"
 def get_access_token():
@@ -167,7 +168,7 @@ def zfile_direct_links(zfile_url, token, storage_key, file_paths):
     return f"Failed: {data.get('msg')}"
 
 
-def zfile_chunked_upload_init(zfile_url, token, storage_key, path, filename, total_size, config):
+def zfile_chunked_upload_init(zfile_url, token, storage_key, path, filename, total_size, config, base_url=""):
     """初始化分片上传，返回 upload_id 和分片信息"""
     chunk_size = CHUNK_SIZE_MB * 1024 * 1024
     total_chunks = (total_size + chunk_size - 1) // chunk_size
@@ -190,6 +191,9 @@ def zfile_chunked_upload_init(zfile_url, token, storage_key, path, filename, tot
         "config": config,
     }
 
+    server_url = MCP_SERVER_URL or base_url or "http://localhost:8092"
+    chunk_url = f"{server_url}/upload/chunk?token={ACCESS_TOKEN}"
+
     return f"""📤 Chunked upload initialized!
 
 📋 Upload ID: {upload_id}
@@ -198,7 +202,7 @@ def zfile_chunked_upload_init(zfile_url, token, storage_key, path, filename, tot
 🧩 Chunks: {total_chunks} × {CHUNK_SIZE_MB}MB
 
 📋 Upload each chunk with:
-  curl -X POST '<MCP_SERVER>/upload/chunk?token=<TOKEN>' \\
+  curl -X POST '{chunk_url}' \\
     -F 'upload_id={upload_id}' \\
     -F 'chunk_index=<0-{total_chunks - 1}>' \\
     -F 'file=@chunk_file'
@@ -207,7 +211,7 @@ Or use this script to split and upload automatically:
   split -b {CHUNK_SIZE_MB}m -d '{filename}' /tmp/chunk_
   for i in $(seq 0 {total_chunks - 1}); do
     idx=$(printf "%02d" $i)
-    curl -X POST '<MCP_SERVER>/upload/chunk?token=<TOKEN>' \\
+    curl -X POST '{chunk_url}' \\
       -F "upload_id={upload_id}" -F "chunk_index=$i" -F "file=@/tmp/chunk_$idx"
   done
 
@@ -235,14 +239,14 @@ TOOLS = [
     {"name": "zfile_list", "description": "List files in ZFile directory",
      "inputSchema": {"type": "object", "properties": {"path": {"type": "string", "description": "Directory path, default /", "default": "/"}}}},
 
-    {"name": "zfile_upload", "description": "Get upload URL for a file (small files < 50MB). Returns URL for direct PUT upload.",
+    {"name": "zfile_upload", "description": "Get upload URL for a file (small files < 10MB). Returns URL for direct PUT upload.",
      "inputSchema": {"type": "object", "properties": {
          "path": {"type": "string", "description": "Target directory, e.g. /uploads/", "default": "/"},
          "filename": {"type": "string", "description": "File name"},
          "size": {"type": "integer", "description": "File size in bytes", "default": 0}
      }, "required": ["filename"]}},
 
-    {"name": "zfile_chunked_upload", "description": "Initialize chunked upload for large files (>50MB). Splits file into chunks to avoid Cloudflare timeout. Returns upload_id and instructions.",
+    {"name": "zfile_chunked_upload", "description": "Initialize chunked upload for large files (>10MB). Splits file into chunks to avoid Cloudflare timeout. Returns upload_id and instructions.",
      "inputSchema": {"type": "object", "properties": {
          "path": {"type": "string", "description": "Target directory", "default": "/"},
          "filename": {"type": "string", "description": "File name"},
@@ -275,7 +279,7 @@ TOOLS = [
 ]
 
 
-def handle_message(msg: dict, config: dict) -> dict:
+def handle_message(msg: dict, config: dict, base_url: str = "") -> dict:
     method = msg.get("method")
     params = msg.get("params", {})
     msg_id = msg.get("id")
@@ -283,11 +287,15 @@ def handle_message(msg: dict, config: dict) -> dict:
     if method == "initialize":
         return {"jsonrpc": "2.0", "id": msg_id, "result": {
             "protocolVersion": "2024-11-05",
-            "capabilities": {"tools": {}},
+            "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
             "serverInfo": {"name": "zfile-mcp", "version": VERSION}
         }}
     elif method == "tools/list":
         return {"jsonrpc": "2.0", "id": msg_id, "result": {"tools": TOOLS}}
+    elif method == "resources/list":
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {"resources": []}}
+    elif method == "prompts/list":
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {"prompts": []}}
     elif method == "tools/call":
         name = params.get("name")
         args = params.get("arguments", {})
@@ -304,7 +312,7 @@ def handle_message(msg: dict, config: dict) -> dict:
             elif name == "zfile_upload":
                 result = zfile_upload(zfile_url, token, storage_key, args.get("path", "/"), args["filename"], args.get("size", 0))
             elif name == "zfile_chunked_upload":
-                result = zfile_chunked_upload_init(zfile_url, token, storage_key, args.get("path", "/"), args["filename"], args["total_size"], config)
+                result = zfile_chunked_upload_init(zfile_url, token, storage_key, args.get("path", "/"), args["filename"], args["total_size"], config, base_url)
             elif name == "zfile_chunked_upload_status":
                 result = zfile_chunked_upload_status(args["upload_id"])
             elif name == "zfile_batch_upload":
@@ -339,6 +347,15 @@ def get_config_and_token(access_token: str = None):
     except Exception as e:
         raise HTTPException(status_code=401, detail=str(e))
     return {"zfile_url": zfile_url, "token": zfile_token, "storage_key": storage_key}
+
+
+def get_base_url(request: Request) -> str:
+    """Extract MCP server base URL from request headers."""
+    if MCP_SERVER_URL:
+        return MCP_SERVER_URL
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", "localhost:8092"))
+    return f"{scheme}://{host}"
 
 
 # ============================================================
@@ -466,10 +483,29 @@ async def upload_status(token: str = None, upload_id: str = None):
 async def sse_endpoint(request: Request, token: str = None):
     if request.method == "HEAD":
         return {"status": "ok"}
+    # POST = Streamable HTTP 模式 (Kiro rmcp)
+    if request.method == "POST":
+        accept = request.headers.get("accept", "")
+        config = get_config_and_token(token)
+        try:
+            body = await request.json()
+        except Exception as e:
+            return JSONResponse(
+                {"jsonrpc": "2.0", "error": {"code": -32700, "message": f"Parse error: {e}"}, "id": None}, status_code=400)
+        response = handle_message(body, config, get_base_url(request))
+        if response is None:
+            return Response(status_code=202)
+        if "text/event-stream" in accept:
+            async def single_event():
+                yield f"event: message\ndata: {json.dumps(response)}\n\n"
+            return StreamingResponse(single_event(), media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        return JSONResponse(response, headers={"Content-Type": "application/json"})
+    # GET = SSE 流模式
     config = get_config_and_token(token)
     session_id = str(uuid.uuid4())
     queue = asyncio.Queue()
-    sessions[session_id] = {"queue": queue, "config": config}
+    sessions[session_id] = {"queue": queue, "config": config, "base_url": get_base_url(request)}
 
     async def event_generator():
         scheme = request.headers.get("x-forwarded-proto", "https")
@@ -497,10 +533,11 @@ async def message_endpoint(request: Request, session_id: str):
         raise HTTPException(status_code=404, detail="Session not found")
     session = sessions[session_id]
     body = await request.json()
-    response = handle_message(body, session["config"])
+    response = handle_message(body, session["config"], session.get("base_url", ""))
     if response:
         await session["queue"].put(response)
-    return {"status": "ok"}
+        return JSONResponse(response)
+    return Response(status_code=202)
 
 
 # ============================================================
@@ -537,7 +574,7 @@ async def streamable_http_endpoint(request: Request, token: str = None):
         except Exception as e:
             return JSONResponse(
                 {"jsonrpc": "2.0", "error": {"code": -32700, "message": f"Parse error: {e}"}, "id": None}, status_code=400)
-        response = handle_message(body, config)
+        response = handle_message(body, config, get_base_url(request))
         if response is None:
             return Response(status_code=204)
         return JSONResponse(response, headers={"Access-Control-Allow-Origin": "*", "Content-Type": "application/json"})

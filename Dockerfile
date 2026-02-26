@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 LABEL maintainer="neosun100"
 LABEL description="ZFile MCP Server - AI assistant integration for ZFile"
-LABEL version="1.3.0"
+LABEL version="1.3.2"
 
 WORKDIR /app
 
@@ -17,7 +17,8 @@ ENV ZFILE_USER=""
 ENV ZFILE_PASS=""
 ENV ZFILE_STORAGE_KEY="1"
 ENV ACCESS_TOKEN=""
-ENV CHUNK_SIZE_MB="50"
+ENV CHUNK_SIZE_MB="10"
+ENV MCP_SERVER_URL=""
 
 EXPOSE 8092
 

@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2] - 2026-02-26
+
+### Fixed
+- **Chunked upload curl commands now include real server URL and token** — Previously showed `<MCP_SERVER>` and `<TOKEN>` placeholders, making the commands unusable without manual editing. Now auto-detects the server URL from request headers or `MCP_SERVER_URL` env var.
+
+### Added
+- `MCP_SERVER_URL` env var — Optional override for the MCP server's external URL (useful behind reverse proxies)
+
+## [1.3.1] - 2026-02-26
+
+### Changed
+- **CHUNK_SIZE_MB default: 50 → 10** — 50MB chunks exceeded Cloudflare's 100s timeout at ~300KB/s upload speed. 10MB chunks complete in ~36s, well within limits.
+- Updated tool descriptions to reflect 10MB threshold
+
 ## [1.3.0] - 2026-02-26
 
 ### Added
