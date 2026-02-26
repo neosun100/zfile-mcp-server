@@ -277,13 +277,13 @@ zfile.example.com {
 | 🔗 `zfile_direct_links` | 批次生成永久直連 |
 | 🔗 `zfile_short_link` | 生成 31 天短連 |
 
-### 💡 為什麼用 URL 上傳？
+### 💡 為什麼用 URL 上傳（而不是 Base64）？
 
-Base64 上傳會消耗上下文 token：
-- 1MB 檔案 → ~35萬 tokens
-- 5MB 檔案 → ~175萬 tokens（超出大多數上下文限制！）
+有些 MCP 伺服器會把檔案編碼成 base64 塞進大模型上下文 — 這會浪費大量 token 和費用：
+- 1MB 檔案 → 浪費 ~35萬 tokens
+- 5MB 檔案 → 浪費 ~175萬 tokens（超出大多數上下文限制！）
 
-URL 上傳：**0 tokens** — 用戶端直接上傳到 ZFile。
+**ZFile MCP Server 完全避免了這個問題。** 伺服器只回傳一個上傳 URL 給 AI 用戶端，檔案透過 `curl` 直接上傳到 ZFile，完全不經過大模型。結果：檔案上傳 **消耗 0 tokens**。
 
 ### 📦 分塊上傳流程
 

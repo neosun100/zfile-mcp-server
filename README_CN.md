@@ -317,13 +317,13 @@ zfile.example.com {
 为 /report.pdf 生成直链
 ```
 
-### 💡 为什么用 URL 上传？
+### 💡 为什么用 URL 上传（而不是 Base64）？
 
-Base64 上传会消耗上下文 token：
-- 1MB 文件 → ~35万 tokens
-- 5MB 文件 → ~175万 tokens（超出大多数上下文限制！）
+有些 MCP 服务器会把文件编码成 base64 塞进大模型上下文 — 这会浪费大量 token 和费用：
+- 1MB 文件 → 浪费 ~35万 tokens
+- 5MB 文件 → 浪费 ~175万 tokens（超出大多数上下文限制！）
 
-URL 上传：**0 tokens** — 客户端直接上传到 ZFile。
+**ZFile MCP Server 完全避免了这个问题。** 服务器只返回一个上传 URL 给 AI 客户端，文件通过 `curl` 直接上传到 ZFile，完全不经过大模型。结果：文件上传 **消耗 0 tokens**。
 
 ### 📦 分块上传流程
 

@@ -322,13 +322,13 @@ Generate a direct link for /report.pdf
 Generate direct links for all PDF files in /documents
 ```
 
-### 💡 Why URL-based Upload?
+### 💡 Why URL-based Upload (instead of Base64)?
 
-Base64 upload consumes context tokens:
-- 1MB file → ~350K tokens
-- 5MB file → ~1.75M tokens (exceeds most context limits!)
+Some MCP servers encode files as base64 and pass them through the LLM context — this wastes tokens and money:
+- 1MB file → ~350K tokens wasted
+- 5MB file → ~1.75M tokens wasted (exceeds most context limits!)
 
-URL-based upload: **0 tokens** — client uploads directly to ZFile.
+**ZFile MCP Server avoids this entirely.** The server only returns an upload URL to the AI client. The file is then uploaded directly to ZFile via `curl`, completely bypassing the LLM. Result: **0 tokens consumed** for file uploads.
 
 ### 📦 Chunked Upload Flow
 
