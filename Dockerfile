@@ -12,6 +12,7 @@ COPY server.py .
 
 RUN mkdir -p /data /tmp/zfile-chunks
 
+# Environment variables (to be set at runtime)
 ENV ZFILE_URL=""
 ENV ZFILE_USER=""
 ENV ZFILE_PASS=""
@@ -22,6 +23,7 @@ ENV MCP_SERVER_URL=""
 
 EXPOSE 8092
 
+# Health check using Python (no curl needed)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://localhost:8092/health', timeout=5).raise_for_status()" || exit 1
 

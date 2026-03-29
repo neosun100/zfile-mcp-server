@@ -1,8 +1,7 @@
 [English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_TW.md) | [日本語](README_JP.md)
 
 <div align="center">
-  <img src="logo.png" alt="ZFile MCP Server" width="180" />
-  <h1>ZFile MCP Server</h1>
+  <h1>🗂️ ZFile MCP Server</h1>
   <p>让 AI 助手能够与 ZFile 网盘系统交互的 MCP 服务器</p>
 
   [![Docker Hub](https://img.shields.io/docker/v/neosun/zfile-mcp-server?label=Docker%20Hub&logo=docker)](https://hub.docker.com/r/neosun/zfile-mcp-server)
@@ -15,14 +14,12 @@
 
 ## ✨ 功能特性
 
-- 📁 **文件列表** — 浏览 ZFile 目录
-- 📤 **上传文件** — 获取上传 URL（无 base64，节省上下文 token）
-- 📤 **批量上传** — 一次获取多个上传 URL
-- 📦 **分块上传** — 大文件分块上传（Cloudflare 友好，自动合并）
-- 🔗 **直链生成** — 生成永久直链（单个或批量）
-- 🔗 **短链生成** — 生成 31 天有效短链
-- 🔐 **安全** — 自动生成访问令牌，凭据存储在服务端
-- 🌐 **多协议** — SSE（Kiro、Claude Desktop）+ Streamable HTTP（Gemini CLI）
+- 📁 **文件列表** - 浏览 ZFile 目录
+- 📤 **上传文件** - 获取上传 URL（无 base64，节省上下文 token）
+- 📤 **批量上传** - 一次获取多个上传 URL
+- 🔗 **直链生成** - 生成永久直链（单个或批量）
+- 🔗 **短链生成** - 生成 31 天有效短链
+- 🔐 **安全** - 自动生成访问令牌，凭据存储在服务端
 
 ## 🏗️ 架构设计
 
@@ -37,9 +34,9 @@
 ```
 
 **安全模型：**
-- 🔒 客户端仅存储 `ACCESS_TOKEN`（用于 MCP 认证）
-- 🔒 服务端通过环境变量存储 ZFile 凭据
-- 🔒 ZFile 凭据永不暴露给客户端
+- 客户端仅存储 `ACCESS_TOKEN`（用于 MCP 认证）
+- 服务端通过环境变量存储 ZFile 凭据
+- ZFile 凭据永不暴露给客户端
 
 ## 🚀 快速开始
 
@@ -90,9 +87,6 @@ services:
       - ZFILE_USER=your_username
       - ZFILE_PASS=your_password
       - ZFILE_STORAGE_KEY=1
-      # - ACCESS_TOKEN=            # 不设置则自动生成
-      # - CHUNK_SIZE_MB=10         # 分块大小，默认 10MB
-      # - MCP_SERVER_URL=          # 可选：分块上传命令中的外部 URL
     volumes:
       - ./data:/data
 ```
@@ -103,17 +97,23 @@ docker compose up -d
 
 ### 方式三：源码运行
 
-**环境要求：** Python 3.11+
+**环境要求：**
+- Python 3.11+
+- pip
 
 ```bash
 git clone https://github.com/neosun100/zfile-mcp-server.git
 cd zfile-mcp-server
+
+# 安装依赖
 pip install -r requirements.txt
 
+# 设置环境变量
 export ZFILE_URL=https://your-zfile.com
 export ZFILE_USER=admin
 export ZFILE_PASS=password
 
+# 运行
 python server.py
 ```
 
@@ -123,19 +123,15 @@ python server.py
 
 | 变量 | 必需 | 说明 | 默认值 |
 |------|------|------|--------|
-| `ZFILE_URL` | ✅ | ZFile 服务器地址 | — |
-| `ZFILE_USER` | ✅ | ZFile 管理员用户名 | — |
-| `ZFILE_PASS` | ✅ | ZFile 管理员密码 | — |
+| `ZFILE_URL` | ✅ | ZFile 服务器地址 | - |
+| `ZFILE_USER` | ✅ | ZFile 管理员用户名 | - |
+| `ZFILE_PASS` | ✅ | ZFile 管理员密码 | - |
 | `ZFILE_STORAGE_KEY` | ❌ | 存储源 Key | `1` |
-| `ACCESS_TOKEN` | ❌ | 自定义访问令牌（不设置则自动生成） | 自动生成 |
-| `CHUNK_SIZE_MB` | ❌ | 大文件分块大小 | `10` |
-| `MCP_SERVER_URL` | ❌ | 分块上传命令中的外部 URL（反向代理场景下使用） | 自动检测 |
-
-> 💡 **提示：** 如果未设置 `MCP_SERVER_URL`，服务器会从请求头（`X-Forwarded-Host`、`X-Forwarded-Proto`）自动检测外部 URL。在复杂代理环境下建议显式设置。
+| `ACCESS_TOKEN` | ❌ | 自定义访问令牌 | 自动生成 |
 
 ### MCP 客户端配置
 
-#### 🟢 Kiro CLI
+#### Kiro CLI
 
 添加到 `~/.kiro/settings/mcp.json`：
 
@@ -153,9 +149,9 @@ python server.py
 }
 ```
 
-#### 🟣 Claude Desktop
+#### Claude Desktop
 
-添加到 Claude Desktop 配置（macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`）：
+添加到 Claude Desktop 配置：
 
 ```json
 {
@@ -163,48 +159,6 @@ python server.py
     "zfile": {
       "type": "sse",
       "url": "https://your-server.com/mcp/sse?token=YOUR_ACCESS_TOKEN"
-    }
-  }
-}
-```
-
-#### 🔵 Google Gemini CLI
-
-Gemini CLI 使用 Streamable HTTP 协议。添加到 `~/.gemini/settings.json`：
-
-```json
-{
-  "mcpServers": {
-    "zfile": {
-      "uri": "https://your-server.com/mcp?token=YOUR_ACCESS_TOKEN"
-    }
-  }
-}
-```
-
-#### 🟡 Cursor
-
-添加到项目根目录 `.cursor/mcp.json`：
-
-```json
-{
-  "mcpServers": {
-    "zfile": {
-      "url": "https://your-server.com/mcp/sse?token=YOUR_ACCESS_TOKEN"
-    }
-  }
-}
-```
-
-#### 🔴 Windsurf
-
-添加到 `~/.codeium/windsurf/mcp_config.json`：
-
-```json
-{
-  "mcpServers": {
-    "zfile": {
-      "serverUrl": "https://your-server.com/mcp/sse?token=YOUR_ACCESS_TOKEN"
     }
   }
 }
@@ -227,8 +181,6 @@ Cloudflare Tunnel 提供安全访问，无需暴露端口。在 Cloudflare Dashb
 3. 添加两条记录：
    - Path: `/mcp/*` → Service: `http://localhost:8092`
    - Path: (空) → Service: `http://localhost:8090`
-
-> ⚠️ **Cloudflare 超时：** Cloudflare 有 100s 代理读取超时。上传大文件时，请使用分块上传（`zfile_chunked_upload`），默认 `CHUNK_SIZE_MB=10` 可确保每个分块在超时内完成。
 
 ### 方案 B：Nginx 反向代理
 
@@ -286,14 +238,12 @@ zfile.example.com {
 
 | 工具 | 说明 |
 |------|------|
-| 📁 `zfile_list` | 列出目录文件 |
-| 📤 `zfile_upload` | 获取单个文件上传 URL（< 10MB） |
-| 📤 `zfile_batch_upload` | 批量获取上传 URL |
-| 📦 `zfile_chunked_upload` | 初始化大文件分块上传（> 10MB） |
-| 📊 `zfile_chunked_upload_status` | 查询分块上传进度 |
-| 🔗 `zfile_direct_link` | 生成单个文件永久直链 |
-| 🔗 `zfile_direct_links` | 批量生成永久直链 |
-| 🔗 `zfile_short_link` | 生成 31 天短链 |
+| `zfile_list` | 列出目录文件 |
+| `zfile_upload` | 获取单个文件上传 URL（返回 URL + 直链） |
+| `zfile_batch_upload` | 批量获取上传 URL |
+| `zfile_direct_link` | 生成单个文件永久直链 |
+| `zfile_direct_links` | 批量生成永久直链 |
+| `zfile_short_link` | 生成 31 天短链 |
 
 ### 使用示例
 
@@ -302,14 +252,9 @@ zfile.example.com {
 列出 /documents 目录下的所有文件
 ```
 
-**上传小文件：**
+**上传文件：**
 ```
 我需要上传 app.apk 到 /releases 文件夹
-```
-
-**上传大文件（分块）：**
-```
-上传一个 200MB 的视频文件到 /videos
 ```
 
 **生成直链：**
@@ -317,28 +262,13 @@ zfile.example.com {
 为 /report.pdf 生成直链
 ```
 
-### 💡 为什么用 URL 上传（而不是 Base64）？
+### 为什么用 URL 上传？
 
-有些 MCP 服务器会把文件编码成 base64 塞进大模型上下文 — 这会浪费大量 token 和费用：
-- 1MB 文件 → 浪费 ~35万 tokens
-- 5MB 文件 → 浪费 ~175万 tokens（超出大多数上下文限制！）
+Base64 上传会消耗上下文 token：
+- 1MB 文件 → ~35万 tokens
+- 5MB 文件 → ~175万 tokens（超出大多数上下文限制！）
 
-**ZFile MCP Server 完全避免了这个问题。** 服务器只返回一个上传 URL 给 AI 客户端，文件通过 `curl` 直接上传到 ZFile，完全不经过大模型。结果：文件上传 **消耗 0 tokens**。
-
-### 📦 分块上传流程
-
-适用于 > 10MB 的文件（尤其在 Cloudflare 代理后）：
-
-```
-1. AI 调用 zfile_chunked_upload → 获取 upload_id + curl 命令
-2. 客户端将文件切分为 10MB 分块
-3. 客户端逐个 POST 分块到 /upload/chunk 端点
-4. 服务端收齐所有分块后自动合并
-5. 服务端将合并文件上传到 ZFile
-6. 返回直链 ✅
-```
-
-> 💡 分块上传返回的 `curl` 命令已包含真实的服务器 URL 和 token，直接复制运行即可。
+URL 上传：**0 tokens** - 客户端直接上传到 ZFile。
 
 ## 📁 项目结构
 
@@ -362,7 +292,7 @@ zfile-mcp-server/
 
 - **运行时：** Python 3.11
 - **框架：** FastAPI + Uvicorn
-- **协议：** MCP (Model Context Protocol) — SSE + Streamable HTTP
+- **协议：** MCP (Model Context Protocol) over SSE
 - **HTTP 客户端：** httpx
 - **容器：** Docker
 

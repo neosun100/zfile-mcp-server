@@ -11,8 +11,8 @@ services:
       - ZFILE_PASS=your_password
       - ZFILE_STORAGE_KEY=1
       # - ACCESS_TOKEN=  # auto-generated if not set
-      # - CHUNK_SIZE_MB=50  # chunk size for large file upload
-      # - MCP_SERVER_URL=  # optional: external URL override for chunked upload commands
+      # - CHUNK_SIZE_MB=10  # chunk size in MB for large file upload
+      # - MCP_SERVER_URL=  # optional: external URL override for chunked upload callbacks
     volumes:
       - ./data:/data
     extra_hosts:
