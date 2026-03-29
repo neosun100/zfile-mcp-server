@@ -17,18 +17,20 @@
 - 📁 **List Files** - Browse directories in ZFile
 - 📤 **Upload Files** - Get upload URLs (no base64, saves context tokens)
 - 📤 **Batch Upload** - Get multiple upload URLs at once
+- 🧩 **Chunked Upload** - Large file upload with auto-merge (Cloudflare-friendly)
 - 🔗 **Direct Links** - Generate permanent direct download links (single or batch)
 - 🔗 **Short Links** - Generate temporary short links (31 days)
 - 🔐 **Secure** - Auto-generated access token, credentials stored server-side
+- 🌐 **Dual Protocol** - SSE (Kiro, Claude Desktop) + Streamable HTTP (Gemini CLI)
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────────────┐         ┌─────────────────────────┐         ┌─────────┐
-│  MCP Client (Kiro/Claude)│  SSE    │  MCP Server (Docker)    │  API    │  ZFile  │
-│  ┌───────────────────┐  │ ──────► │  ┌─────────────────┐    │ ──────► │         │
-│  │ Only ACCESS_TOKEN │  │  Token  │  │ ZFile credentials│   │         │         │
-│  └───────────────────┘  │         │  │ stored here      │   │         │         │
+│  MCP Client (Kiro/Claude)│  SSE/   │  MCP Server (Docker)    │  API    │  ZFile  │
+│  ┌───────────────────┐  │  HTTP   │  ┌─────────────────┐    │ ──────► │         │
+│  │ Only ACCESS_TOKEN │  │ ──────► │  │ ZFile credentials│   │         │         │
+│  └───────────────────┘  │  Token  │  │ stored here      │   │         │         │
 └─────────────────────────┘         │  └─────────────────┘    │         └─────────┘
                                     └─────────────────────────┘
 ```
@@ -87,8 +89,13 @@ services:
       - ZFILE_USER=your_username
       - ZFILE_PASS=your_password
       - ZFILE_STORAGE_KEY=1
+      # - ACCESS_TOKEN=  # auto-generated if not set
+      # - CHUNK_SIZE_MB=10  # chunk size in MB for large file upload
+      # - MCP_SERVER_URL=  # optional: external URL override for chunked upload callbacks
     volumes:
       - ./data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 ```
 
 ```bash
@@ -128,6 +135,8 @@ python server.py
 | `ZFILE_PASS` | ✅ | ZFile admin password | - |
 | `ZFILE_STORAGE_KEY` | ❌ | Storage source key | `1` |
 | `ACCESS_TOKEN` | ❌ | Custom access token (auto-generated if not set) | Auto |
+| `CHUNK_SIZE_MB` | ❌ | Chunk size in MB for large file upload | `10` |
+| `MCP_SERVER_URL` | ❌ | External URL override for chunked upload callbacks | Auto |
 
 ### MCP Client Configuration
 
@@ -159,6 +168,21 @@ Add to Claude Desktop config:
     "zfile": {
       "type": "sse",
       "url": "https://your-server.com/mcp/sse?token=YOUR_ACCESS_TOKEN"
+    }
+  }
+}
+```
+
+#### Google Gemini CLI
+
+Add to Gemini CLI config (Streamable HTTP mode):
+
+```json
+{
+  "mcpServers": {
+    "zfile": {
+      "type": "streamableHttp",
+      "url": "https://your-server.com/mcp?token=YOUR_ACCESS_TOKEN"
     }
   }
 }
@@ -241,6 +265,8 @@ zfile.example.com {
 | `zfile_list` | List files in a directory |
 | `zfile_upload` | Get upload URL for a file (returns URL + direct link) |
 | `zfile_batch_upload` | Get upload URLs for multiple files |
+| `zfile_chunked_upload` | Initialize chunked upload for large files (>10MB, Cloudflare-friendly) |
+| `zfile_chunked_upload_status` | Check status of a chunked upload |
 | `zfile_direct_link` | Generate permanent direct link for a file |
 | `zfile_direct_links` | Generate direct links for multiple files |
 | `zfile_short_link` | Generate 31-day short link |
@@ -297,7 +323,7 @@ zfile-mcp-server/
 
 - **Runtime:** Python 3.11
 - **Framework:** FastAPI + Uvicorn
-- **Protocol:** MCP (Model Context Protocol) over SSE
+- **Protocol:** MCP (Model Context Protocol) over SSE + Streamable HTTP
 - **HTTP Client:** httpx
 - **Container:** Docker
 

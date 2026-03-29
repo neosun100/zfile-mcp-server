@@ -17,17 +17,19 @@
 - 📁 **文件列表** - 浏览 ZFile 目录
 - 📤 **上传文件** - 获取上传 URL（无 base64，节省上下文 token）
 - 📤 **批量上传** - 一次获取多个上传 URL
+- 🧩 **分片上传** - 大文件分片上传，自动合并（Cloudflare 友好）
 - 🔗 **直链生成** - 生成永久直链（单个或批量）
 - 🔗 **短链生成** - 生成 31 天有效短链
 - 🔐 **安全** - 自动生成访问令牌，凭据存储在服务端
+- 🌐 **双协议** - SSE（Kiro、Claude Desktop）+ Streamable HTTP（Gemini CLI）
 
 ## 🏗️ 架构设计
 
 ```
 ┌─────────────────────────┐         ┌─────────────────────────┐         ┌─────────┐
-│  MCP 客户端 (Kiro/Claude) │  SSE    │  MCP 服务器 (Docker)     │  API    │  ZFile  │
-│  ┌───────────────────┐  │ ──────► │  ┌─────────────────┐    │ ──────► │         │
-│  │ 仅存 ACCESS_TOKEN  │  │  Token  │  │ ZFile 凭据       │   │         │         │
+│  MCP 客户端 (Kiro/Claude) │  SSE/   │  MCP 服务器 (Docker)     │  API    │  ZFile  │
+│  ┌───────────────────┐  │  HTTP   │  ┌─────────────────┐    │ ──────► │         │
+│  │ 仅存 ACCESS_TOKEN  │  │ ──────► │  │ ZFile 凭据       │   │         │         │
 │  └───────────────────┘  │         │  │ 存储在这里        │   │         │         │
 └─────────────────────────┘         │  └─────────────────┘    │         └─────────┘
                                     └─────────────────────────┘
@@ -87,8 +89,13 @@ services:
       - ZFILE_USER=your_username
       - ZFILE_PASS=your_password
       - ZFILE_STORAGE_KEY=1
+      # - ACCESS_TOKEN=  # 不设置则自动生成
+      # - CHUNK_SIZE_MB=10  # 分片大小（MB）
+      # - MCP_SERVER_URL=  # 可选：分片上传回调外部 URL
     volumes:
       - ./data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 ```
 
 ```bash
@@ -128,6 +135,8 @@ python server.py
 | `ZFILE_PASS` | ✅ | ZFile 管理员密码 | - |
 | `ZFILE_STORAGE_KEY` | ❌ | 存储源 Key | `1` |
 | `ACCESS_TOKEN` | ❌ | 自定义访问令牌 | 自动生成 |
+| `CHUNK_SIZE_MB` | ❌ | 分片上传大小（MB） | `10` |
+| `MCP_SERVER_URL` | ❌ | 分片上传回调外部 URL | 自动检测 |
 
 ### MCP 客户端配置
 
@@ -159,6 +168,21 @@ python server.py
     "zfile": {
       "type": "sse",
       "url": "https://your-server.com/mcp/sse?token=YOUR_ACCESS_TOKEN"
+    }
+  }
+}
+```
+
+#### Google Gemini CLI
+
+添加到 Gemini CLI 配置（Streamable HTTP 模式）：
+
+```json
+{
+  "mcpServers": {
+    "zfile": {
+      "type": "streamableHttp",
+      "url": "https://your-server.com/mcp?token=YOUR_ACCESS_TOKEN"
     }
   }
 }
@@ -241,6 +265,8 @@ zfile.example.com {
 | `zfile_list` | 列出目录文件 |
 | `zfile_upload` | 获取单个文件上传 URL（返回 URL + 直链） |
 | `zfile_batch_upload` | 批量获取上传 URL |
+| `zfile_chunked_upload` | 大文件分片上传（>10MB，Cloudflare 友好） |
+| `zfile_chunked_upload_status` | 查询分片上传状态 |
 | `zfile_direct_link` | 生成单个文件永久直链 |
 | `zfile_direct_links` | 批量生成永久直链 |
 | `zfile_short_link` | 生成 31 天短链 |
@@ -292,7 +318,7 @@ zfile-mcp-server/
 
 - **运行时：** Python 3.11
 - **框架：** FastAPI + Uvicorn
-- **协议：** MCP (Model Context Protocol) over SSE
+- **协议：** MCP (Model Context Protocol) over SSE + Streamable HTTP
 - **HTTP 客户端：** httpx
 - **容器：** Docker
 

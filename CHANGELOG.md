@@ -2,7 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.1.0] - 2024-12-22
+## [1.3.2] - 2026-02-26
+
+### Fixed
+- Improved chunked upload merge reliability
+- Fixed SSE POST mode response handling for Kiro rmcp client
+
+## [1.3.0] - 2026-01-10
+
+### Added
+- **Chunked upload** for large files (Cloudflare-friendly, auto-merge)
+  - `zfile_chunked_upload` - Initialize chunked upload, returns upload_id and curl instructions
+  - `zfile_chunked_upload_status` - Check chunked upload progress
+  - HTTP endpoint `POST /upload/chunk` for receiving individual chunks
+  - HTTP endpoint `GET /upload/status` for querying upload status
+  - Auto-cleanup of stale chunks (1 hour expiry, checked every 10 minutes)
+- New environment variables: `CHUNK_SIZE_MB`, `MCP_SERVER_URL`
+
+### Changed
+- Health endpoint now reports supported protocols and features
+
+## [1.2.0] - 2025-12-28
+
+### Added
+- **Streamable HTTP protocol** support (Google Gemini CLI compatible)
+  - `POST /mcp` endpoint for streamable HTTP mode
+  - `GET /mcp` returns server info and endpoint discovery
+  - `GET /mcp/sse` and `POST /mcp/message` as SSE aliases
+- SSE endpoint now also accepts POST for Kiro rmcp Streamable HTTP mode
+- Root endpoint `/` returns full server info with protocol documentation
+
+### Changed
+- Version bumped to 1.2.0
+- Server now supports dual protocol: SSE + Streamable HTTP
+
+## [1.1.0] - 2025-12-22
 
 ### Changed
 - Removed base64 upload tool (was consuming context tokens)
@@ -23,7 +57,7 @@ All notable changes to this project will be documented in this file.
 | `zfile_direct_links` | Generate direct links for multiple files |
 | `zfile_short_link` | Generate 31-day short link |
 
-## [1.0.0] - 2024-12-21
+## [1.0.0] - 2025-12-21
 
 ### Added
 - Initial release
